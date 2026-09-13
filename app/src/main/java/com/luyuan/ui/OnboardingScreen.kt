@@ -54,6 +54,8 @@ fun OnboardingScreen(vm: LuyuanViewModel, onDone: () -> Unit) {
     var allFiles by remember { mutableStateOf(PermissionHelper.hasAllFiles(context)) }
     var candidates by remember { mutableStateOf(listOf<StorageLocator.Candidate>()) }
     var scanned by remember { mutableStateOf(false) }
+    // vc62 修 CI：扫描按钮三处引用了 scanning，但声明漏了
+    var scanning by remember { mutableStateOf(false) }
     var pickedPath by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 

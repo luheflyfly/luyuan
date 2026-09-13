@@ -35,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -230,7 +231,7 @@ fun ReviewScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
                                         .background(
                                             if (isToday) Brush.verticalGradient(
                                                 listOf(LuyuanColors.Green500, LuyuanColors.Green700)
-                                            ) else LuyuanColors.Green100,
+                                            ) else SolidColor(LuyuanColors.Green100),
                                             RoundedCornerShape(5.dp)
                                         )
                                 )
