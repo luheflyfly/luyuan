@@ -99,33 +99,35 @@ object MessageTodoExtractor {
         }
     }
 
-    /** 从模型回复里抠出 JSON 并校验；任何不合规 → null */
-    private fun parseReply(body: String): Extracted? = try {
-        val root = json.parseToJsonElement(body).jsonObject
-        val content = root["choices"]?.jsonArray?.firstOrNull()
-            ?.jsonObject?.get("message")?.jsonObject?.get("content")?.jsonPrimitive?.content
-            ?: return null
-        // 模型偶尔裹 markdown 代码块或加前后缀：取第一个 { 到最后一个 }
-        val s = content.indexOf('{')
-        val e = content.lastIndexOf('}')
-        if (s < 0 || e <= s) return null
-        val obj = json.parseToJsonElement(content.substring(s, e + 1)).jsonObject
+    /** 从模型回复里抠出 JSON 并校验；任何不合规 → null（块体：内部有 return，表达式体编译不过） */
+    private fun parseReply(body: String): Extracted? {
+        return try {
+            val root = json.parseToJsonElement(body).jsonObject
+            val content = root["choices"]?.jsonArray?.firstOrNull()
+                ?.jsonObject?.get("message")?.jsonObject?.get("content")?.jsonPrimitive?.content
+                ?: return null
+            // 模型偶尔裹 markdown 代码块或加前后缀：取第一个 { 到最后一个 }
+            val s = content.indexOf('{')
+            val e = content.lastIndexOf('}')
+            if (s < 0 || e <= s) return null
+            val obj = json.parseToJsonElement(content.substring(s, e + 1)).jsonObject
 
-        val has = obj["has_todo"]?.jsonPrimitive?.content?.trim()?.lowercase()
-        val isTodo = has == "true" || has == "1"
-        if (!isTodo) return null
+            val has = obj["has_todo"]?.jsonPrimitive?.content?.trim()?.lowercase()
+            val isTodo = has == "true" || has == "1"
+            if (!isTodo) return null
 
-        val text = obj["text"]?.jsonPrimitive?.content?.trim().orEmpty()
-        if (text.isEmpty()) return null
-        // 防幻觉：事情描述不能是空壳；长度兜底（模型抽风时输出超长文本）
-        if (text.length > 200) return null
+            val text = obj["text"]?.jsonPrimitive?.content?.trim().orEmpty()
+            if (text.isEmpty()) return null
+            // 防幻觉：事情描述不能是空壳；长度兜底（模型抽风时输出超长文本）
+            if (text.length > 200) return null
 
-        Extracted(
-            text = text,
-            who = obj["who"]?.jsonPrimitive?.content?.trim().orEmpty().take(20),
-            whenText = obj["when"]?.jsonPrimitive?.content?.trim().orEmpty().take(40)
-        )
-    } catch (_: Exception) {
-        null
+            Extracted(
+                text = text,
+                who = obj["who"]?.jsonPrimitive?.content?.trim().orEmpty().take(20),
+                whenText = obj["when"]?.jsonPrimitive?.content?.trim().orEmpty().take(40)
+            )
+        } catch (_: Exception) {
+            null
+        }
     }
 }
