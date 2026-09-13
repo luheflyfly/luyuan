@@ -45,6 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -463,7 +464,7 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                                             .background(
                                                 if (isToday) Brush.verticalGradient(
                                                     listOf(LuyuanColors.Green500, LuyuanColors.Green700)
-                                                ) else LuyuanColors.Green100,
+                                                ) else SolidColor(LuyuanColors.Green100),
                                                 RoundedCornerShape(4.dp)
                                             )
                                     )
@@ -738,6 +739,29 @@ internal fun parseHm(s: String): LocalTime? = try {
 
 internal fun dayShort(i: Int): String =
     DayOfWeek.of(i.coerceIn(1, 7)).getDisplayName(TextStyle.SHORT, Locale.CHINA).removeSuffix("周")
+
+/** 「下一节」槽位开始时间转当日分钟数（vc62 修 CI：本文件此前引用了不存在的 nextCourse） */
+internal fun slotToMin(s: String): Int {
+    val p = s.split(":")
+    return (p.getOrNull(0)?.toIntOrNull() ?: 0) * 60 + (p.getOrNull(1)?.toIntOrNull() ?: 0)
+}
+
+/** 下一节课：今天尚未开始的最早一节 →（课，距开始分钟数）；否则顺延最近有课日（分钟数给 0） */
+internal fun nextCourse(courses: List<Course>): Pair<Course, Int>? {
+    if (courses.isEmpty()) return null
+    val todayDow = LocalDate.now().dayOfWeek.value
+    val nowMin = LocalTime.now().let { it.hour * 60 + it.minute }
+    courses.filter { it.weekday == todayDow && slotToMin(it.start) >= nowMin }
+        .minByOrNull { slotToMin(it.start) }
+        ?.let { return it to (slotToMin(it.start) - nowMin) }
+    for (delta in 1..7) {
+        val wd = (todayDow + delta - 1) % 7 + 1
+        courses.filter { it.weekday == wd }
+            .minByOrNull { slotToMin(it.start) }
+            ?.let { return it to 0 }
+    }
+    return null
+}
 
 /** 教室·老师（缺项自动略过） */
 internal fun coursePlaceLine(c: Course): String = listOf(c.place, c.teacher)
