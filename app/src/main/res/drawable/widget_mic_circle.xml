@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 速记条 W2·麦克风圆底（green-800=#224A3A，稿 .w-quick .mic=40px 圆）。C4+ 新增 2026-09-13 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="#224A3A" />
+</shape>

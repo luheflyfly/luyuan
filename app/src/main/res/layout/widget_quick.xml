@@ -1,33 +1,52 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 桌面小部件：仿输入框样式（点一下直达主页输入框）+ 右侧麦克风（直接开录音）。
-     RemoteViews 只认传统 View，不能用 Compose -->
+<!-- 桌面小部件「速记条」4×1 · W2 稿对齐版（C4+ 2026-09-13，真源=ui-mobile/widget/index.html .w-quick）：
+     占位文案「记一笔 / 说一句 / 问路远…」(text-4) + 「回车即存」bg-tint 胶囊 + 40dp 深绿圆白麦克风。
+     回炉前是「铅笔+麦克风」两个 emoji 老皮（红线禁 emoji，注释里也不留 emoji 字符）。
+     ⚠️ vivo 红线照守：只用 LinearLayout/TextView/ImageView，嵌套 1 层，属性基础集。
+     点击分区不变：widget_note→主页输入框，widget_record→直接开录音（QuickWidgetProvider 不用动） -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="horizontal"
     android:gravity="center_vertical"
     android:background="@drawable/widget_bg"
-    android:paddingLeft="16dp"
+    android:paddingLeft="18dp"
     android:paddingRight="10dp"
-    android:paddingTop="10dp"
-    android:paddingBottom="10dp">
+    android:paddingTop="9dp"
+    android:paddingBottom="9dp">
 
     <TextView
         android:id="@+id/widget_note"
         android:layout_width="0dp"
-        android:layout_height="match_parent"
+        android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:gravity="center_vertical"
-        android:text="✏️ 记一笔…"
-        android:textColor="#9CA3AF"
-        android:textSize="15sp" />
+        android:text="记一笔 / 说一句 / 问路远…"
+        android:textColor="#B8C0BB"
+        android:textSize="13sp"
+        android:maxLines="1"
+        android:ellipsize="end" />
 
     <TextView
-        android:id="@+id/widget_record"
+        android:id="@+id/widget_hint"
         android:layout_width="wrap_content"
-        android:layout_height="match_parent"
-        android:gravity="center"
-        android:paddingLeft="14dp"
-        android:text="🎙️"
-        android:textSize="18sp" />
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="8dp"
+        android:background="@drawable/widget_hint_pill"
+        android:paddingLeft="9dp"
+        android:paddingRight="9dp"
+        android:paddingTop="3dp"
+        android:paddingBottom="3dp"
+        android:text="回车即存"
+        android:textColor="#B8C0BB"
+        android:textSize="10sp" />
+
+    <ImageView
+        android:id="@+id/widget_record"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginLeft="8dp"
+        android:background="@drawable/widget_mic_circle"
+        android:padding="10dp"
+        android:src="@drawable/ic_wg_mic_white"
+        android:contentDescription="说一句" />
 </LinearLayout>

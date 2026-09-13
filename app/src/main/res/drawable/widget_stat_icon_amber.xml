@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 今日卡·统计行图标圆底：琥珀（今天待办，视觉稿 stat/ic 用 amber-bg） -->
+<!-- 今日卡·统计行图标圆底：琥珀（视觉稿 stat/ic 用 amber-bg=#FEF3C7）。
+     C4 回炉 2026-09-13：原 #FDF1E3 是稿外的近似色 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="#FDF1E3" />
+    <solid android:color="#FEF3C7" />
     <corners android:radius="10dp" />
 </shape>

@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 今日卡底：暖白圆角，与清爽纸白主题一致 -->
+<!-- 今日卡底：白 95%（视觉稿 .wg=rgba(255,255,255,.95)，RemoteViews 用带 alpha 实色等价），
+     摆在壁纸上=「案头一张便签」。C4 回炉 2026-09-13：原 #FFFDF8 是稿里不存在的中间调 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <solid android:color="#FFFDF8" />
+    <solid android:color="#F2FFFFFF" />
     <corners android:radius="18dp" />
 </shape>

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 速记条 W2·麦克风：白色 1.6 描边（深绿圆底上用；W2 稿 .w-quick .mic=green-800 圆+白 mic 19px）。
+     C4+ 新增 2026-09-13，路径与 ic_wg_mic 完全一致仅换色 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="22dp"
+    android:viewportWidth="22"
+    android:viewportHeight="22">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M8.2,3h5.6a2.8,2.8 0 0 1 2.8,2.8v4.4a5.6,5.6 0 0 1 -11.2,0V5.8A2.8,2.8 0 0 1 8.2,3z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M5.5,10.5a5.5,5.5 0 0 0 11,0" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M11,16v3M8,19.5h6" />
+</vector>

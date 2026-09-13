@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 课程块·无课态底：灰绿（视觉稿 W1「没有课的日子：课块换成『今天没课 🌿 自习好日子』（灰绿底）」）。
+     C4 新增 2026-09-13；由 Provider 在无课时 setInt(setBackgroundResource) 切换 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#E3ECE6" />
+    <corners android:radius="16dp" />
+</shape>

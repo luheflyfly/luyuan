@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 速记条 W2·「回车即存」提示胶囊底（bg-tint=#F6F3EB，稿 .w-quick .hintk）。C4+ 新增 2026-09-13 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#F6F3EB" />
+    <corners android:radius="999dp" />
+</shape>

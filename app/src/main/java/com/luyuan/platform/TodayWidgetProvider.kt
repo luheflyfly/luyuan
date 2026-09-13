@@ -169,8 +169,16 @@ class TodayWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.widget_course_countdown_label, "有课")
             }
         } else {
+            // 无课态（视觉稿 W1：「今天没课 🌿 自习好日子」灰绿底）——换 muted 底并把本块文字换深绿系。
+            // RemoteViews 每次刷新按 XML 重新 inflate，有课时无需回滚深绿样式
+            views.setInt(R.id.widget_course, "setBackgroundResource", R.drawable.widget_course_bg_muted)
+            views.setTextColor(R.id.widget_course_hint, 0xFF4F8A73.toInt())
+            views.setTextColor(R.id.widget_course_name, 0xFF1A3329.toInt())
+            views.setTextColor(R.id.widget_course_place, 0xFF4A5A52.toInt())
+            views.setTextColor(R.id.widget_course_countdown, 0xFF4F8A73.toInt())
+            views.setTextColor(R.id.widget_course_countdown_label, 0xFF4F8A73.toInt())
             views.setTextViewText(R.id.widget_course_hint, "课程")
-            views.setTextViewText(R.id.widget_course_name, "今天没课 · 好日子")
+            views.setTextViewText(R.id.widget_course_name, "今天没课 🌿 自习好日子")
             views.setTextViewText(
                 R.id.widget_course_place,
                 if (courses.isEmpty()) "去课程页添加课表" else "好好休息"
@@ -182,10 +190,21 @@ class TodayWidgetProvider : AppWidgetProvider() {
         // ---- 3 统计行：今天待办 / 本月支出（视觉稿两个带圆底图标的 stat） ----
         val undone = contacts.sumOf { c -> c.undoneTodos.size }
         val overdue = contacts.sumOf { c -> c.todos.count { t -> !t.done && isOverdue(t.remind_at) } }
-        views.setTextViewText(
-            R.id.widget_todo_val,
-            "${undone} 件" + if (overdue > 0) " · $overdue 过期" else ""
-        )
+        // 视觉稿 W1：过期数是红字 em（mild 焦虑设计）。单 TextView 走 Spannable 分色，
+        // 个别 ROM 不认 span 时自动退化成纯文本，无损
+        val todoVal: CharSequence = if (overdue > 0) {
+            val plain = "${undone} 件 ${overdue} 件过期"
+            val sp = android.text.SpannableStringBuilder(plain)
+            sp.setSpan(
+                android.text.style.ForegroundColorSpan(0xFFDC2626.toInt()),
+                "${undone} 件 ".length, plain.length,
+                android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+            sp
+        } else {
+            "${undone} 件"
+        }
+        views.setTextViewText(R.id.widget_todo_val, todoVal)
         val monthSum = expenses
             .filter { isThisMonth(it.spent_at.ifBlank { it.created_at }) }
             .sumOf { it.amount }
