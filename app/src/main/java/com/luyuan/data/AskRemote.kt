@@ -19,7 +19,8 @@ import java.net.URL
  * - 模型从内置目录选择（2026-09 官方现状：deepseek-chat/reasoner 已于 2026-07-24 停用，
  *   现行模型 = deepseek-v4-flash 系；思考开关 = "thinking":{"type":"enabled"/"disabled"}，
  *   不发该参数默认思考开启，所以快答必须显式 disabled；视觉 = deepseek-v4-flash-vision-exp）
- * - 上下文 = 本机近期笔记 + 待办摘要；私密标签笔记一律不外发（§4.4）
+ * - 上下文 = 本机近期笔记 + 待办摘要；私密标签笔记**默认不外发**，
+ *   经用户本次显式授权（allowPrivate=true，问答页勾选）后可外发（立项单 2026-09-13 红线变更）
  */
 object AskRemote {
 
@@ -129,8 +130,11 @@ object AskRemote {
         }
     }
 
-    /** 本机上下文：今日待办摘要 + 近期笔记摘录（排除私密）。超长截断，控 token。 */
-    fun buildContext(context: Context): String {
+    /**
+     * 本机上下文：今日待办摘要 + 近期笔记摘录。超长截断，控 token。
+     * 私密标签笔记默认**不**进上下文；allowPrivate=true（用户本次显式授权）时包含。
+     */
+    fun buildContext(context: Context, allowPrivate: Boolean = false): String {
         val sb = StringBuilder()
         val todoLines = mutableListOf<String>()
         try {
@@ -141,7 +145,7 @@ object AskRemote {
         }
         try {
             for (n in NoteRepository.listNotes(context)) {
-                if (PRIVATE_TAG in n.tags) continue
+                if (!allowPrivate && PRIVATE_TAG in n.tags) continue
                 if (!n.remind_at.isNullOrBlank() && n.remind_fired != true) {
                     todoLines.add("[提醒] ${n.text.take(40)}")
                 }
@@ -155,7 +159,7 @@ object AskRemote {
         }
         try {
             val notes = NoteRepository.listNotes(context)
-                .filter { PRIVATE_TAG !in it.tags }
+                .filter { allowPrivate || PRIVATE_TAG !in it.tags }
                 .take(30)
             if (notes.isNotEmpty()) {
                 sb.appendLine("【最近笔记摘录（新→旧）】")

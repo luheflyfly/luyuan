@@ -91,6 +91,17 @@
             </intent-filter>
         </service>
 
+        <!-- 消息待办：监听微信/QQ 聊天通知 → 粗筛 → 云端抽取 → 待确认（默认关闭，开关在设置页） -->
+        <service
+            android:name=".platform.MessageNotificationListener"
+            android:exported="false"
+            android:label="路远消息待办监听"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
         <service
             android:name=".platform.QuickRecordTile"
             android:exported="true"

@@ -3,8 +3,10 @@ package com.luyuan
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -17,6 +19,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -90,6 +94,19 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 09-13 夜修「胶囊打字看不见」复发（vc57 的 imePadding 在路河 vivo 上无效）：
+        // Activity 未开 edge-to-edge 时，IME insets 在装饰层就被消费掉，Compose 的
+        // WindowInsets.ime 恒为 0；vivo/OriginOS 上 adjustResize 又经常不 resize，
+        // 于是「键盘盖住胶囊 + imePadding 不抬」同时发生。开了 edge-to-edge 后
+        // imePadding 在任何 ROM 都基于真实键盘高度工作。主题恒浅色 → 图标锁深色。
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.light(
+                android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT
+            ),
+            navigationBarStyle = SystemBarStyle.light(
+                android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT
+            )
+        )
         com.luyuan.platform.CrashLogger.install(this)
         autoRoute = routeFromIntent(intent)
         setContent {
@@ -211,6 +228,10 @@ fun AppRoot(startDest: String) {
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        // edge-to-edge 配套：外壳不管状态栏/导航栏 insets——各屏自己的 Scaffold/TopAppBar
+        // 本来就按 insets 设计（有 topBar 的屏自己清状态栏，没有的吃系统栏 inset）。
+        // 外壳若用默认 contentWindowInsets，嵌套 Scaffold 会双重 padding。
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (currentRoute == "home") {
                 NavigationBar(containerColor = MaterialTheme.colorScheme.background) {
@@ -245,6 +266,8 @@ fun AppRoot(startDest: String) {
         Box(
             modifier = Modifier
                 .padding(pad)
+                // 把外壳消费掉的 insets（底栏高度）向下游声明，内层 Scaffold 才不会重复让位
+                .consumeWindowInsets(pad)
                 .fillMaxSize()
         ) {
             NavHost(
@@ -441,12 +464,16 @@ fun AppRoot(startDest: String) {
             // 09-10 二改：detectHorizontalDragGestures 会被外层 HorizontalPager 抢走（同为横向拖拽，
             // Pager 层级更深且是滚动容器，必输）→ 改为自行解析指针事件：
             // 只认「首段位移明确横向向右」的滑动，一旦判定纵向就立刻放行给列表，不再 consume。
+            // 09-13 夜修「滑动切页不行」：这条覆盖层是 hit-target，压在 Pager 上方——从它起手的
+            // 手势（右滑/左滑/竖滑）被 hit-test 全部判给它，Pager 根本收不到，等于屏幕左缘一条
+            // 36dp 宽的手势黑洞。收窄到 16dp 只守住系统返回手势的边缘地带；从条上左滑离手时
+            // 手动翻到下一页（事件无法转发给 Pager，只能代为执行），右滑逻辑不变。
             if (currentRoute == "home" && pagerState.currentPage == 0 && !showSettings) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.CenterStart)
                         .fillMaxHeight()
-                        .width(36.dp)
+                        .width(16.dp)
                         .zIndex(5f)
                         // 09-11 修「左缘右滑无反应」：Android 10+ 把「从屏幕左边缘往右滑」当
                         // 系统返回手势拦截，App 内手势写得再好也收不到事件。必须主动向系统
@@ -468,8 +495,18 @@ fun AppRoot(startDest: String) {
                                     val ev = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
                                     val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
                                     if (!ch.pressed) {
-                                        // 抬手：达到阈值才呼出
-                                        if (isRight && totalDx > 40f) showSettings = true
+                                        // 抬手：向右达到阈值呼出抽屉；向左达到阈值翻下一页
+                                        if (isRight && totalDx > 40f) {
+                                            showSettings = true
+                                        } else if (!isRight && totalDx < -60f &&
+                                            pagerState.currentPage < 4
+                                        ) {
+                                            scope.launch {
+                                                pagerState.animateScrollToPage(
+                                                    pagerState.currentPage + 1
+                                                )
+                                            }
+                                        }
                                         break
                                     }
                                     totalDx += ch.positionChange().x

@@ -8,9 +8,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -25,6 +27,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -44,6 +47,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.luyuan.BuildConfig
 import com.luyuan.data.AskRemote
+import com.luyuan.data.MessageSettings
 import com.luyuan.data.NoteRepository
 import com.luyuan.platform.PermissionHelper
 import com.luyuan.platform.StorageLocator
@@ -292,7 +296,8 @@ fun SettingsScreen(vm: LuyuanViewModel, onBack: () -> Unit, onAsk: () -> Unit = 
             SectionCard("🤖 问路远（AI 问答）") {
                 Text(
                     "填一次 OpenAI 兼容接口（默认 DeepSeek），就能随时用对话问它，回答会参考你本机的笔记和待办。" +
-                        "Key 只存本机 App 私有目录，不进同步目录；私密标签的笔记不会发出去。" +
+                        "Key 只存本机 App 私有目录，不进同步目录；" +
+                        "私密标签的笔记默认不发出去，需要时在对话页勾选「包含私密内容」才会发出。" +
                         "模型不在手填——在对话页顶部一键切换（快答/深思/视觉/Pro）。",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -318,6 +323,9 @@ fun SettingsScreen(vm: LuyuanViewModel, onBack: () -> Unit, onAsk: () -> Unit = 
                 ) { Text("开始对话") }
             }
 
+            // ---------- 📬 消息待办（立项单 2026-09-13 T4/T5） ----------
+            MessageTodoCard()
+
             // ---------- 📱 vivo 保活指引（v1.12）：提醒/通知失灵的自查路径 ----------
             KeepAliveCard()
 
@@ -331,6 +339,138 @@ fun SettingsScreen(vm: LuyuanViewModel, onBack: () -> Unit, onAsk: () -> Unit = 
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+    }
+}
+
+/**
+ * 「消息待办」设置卡（立项单 T4/T5）：手机（主力机口径，09-13 拍板）收到微信/QQ 消息 → 命中待办关键词 → 云端抽取 → 待确认。
+ * 隐私设计三件：①总开关默认关 ②微信/QQ 各自独立白名单 ③本月外发条数可见。
+ */
+@Composable
+private fun MessageTodoCard() {
+    val context = LocalContext.current
+    var open by remember { mutableStateOf(false) }
+    var on by remember { mutableStateOf(MessageSettings.enabled(context)) }
+    var wechat by remember { mutableStateOf(MessageSettings.wechatOn(context)) }
+    var qq by remember { mutableStateOf(MessageSettings.qqOn(context)) }
+    var access by remember { mutableStateOf(MessageSettings.notificationAccess(context)) }
+    var sent by remember { mutableStateOf(MessageSettings.sentCountThisMonth(context)) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(16.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            if (open) "📬 消息待办（点收起）▴" else "📬 消息待办（手机消息自动变待办）▾",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.clickable { open = !open }
+        )
+        if (open) {
+            Text(
+                "开启后，命中待办关键词的消息，其原文会发送到 DeepSeek 云端解析成待办；" +
+                    "其余消息不出本机。抽出来的待办先落「待确认」，你在笔记页点 ✓ 才真入账。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            // ① 通知使用权（前置条件）
+            Text(
+                if (access) "①通知使用权：✅ 已开启"
+                else "①通知使用权：⚠️ 未开启（不开启读不到任何消息）",
+                fontSize = 12.5.sp,
+                color = if (access) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error
+            )
+            if (!access) {
+                Button(onClick = {
+                    try {
+                        context.startActivity(
+                            android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                        )
+                    } catch (_: Exception) {
+                    }
+                }) { Text("去开通知使用权") }
+                Text(
+                    "鸿蒙 4 / 安卓路径：设置 → 通知和状态栏 → 通知管理（或更多通知设置）→ 通知使用权 → 找到「路远消息待办监听」→ 打开。\n" +
+                        "找不到入口时：在设置顶部搜索框搜「通知使用权」直接跳。\n" +
+                        "开完回到本页，状态会变 ✅（下次进设置页刷新）。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("刷新状态", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable {
+                            access = MessageSettings.notificationAccess(context)
+                        })
+                    Spacer(Modifier.width(16.dp))
+                    Text("重扫外发计数", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable {
+                            sent = MessageSettings.sentCountThisMonth(context)
+                        })
+                }
+            }
+
+            // ② 总开关
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("②消息待办总开关", fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                    modifier = Modifier.weight(1f))
+                Switch(
+                    checked = on,
+                    onCheckedChange = {
+                        on = it
+                        MessageSettings.setEnabled(context, it)
+                    }
+                )
+            }
+            Text(
+                if (on) "已开启：命中关键词的消息会送到云端解析" else "已关闭：任何消息都不出本机",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (on) LuyuanColors.Amber else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            // ③ 来源白名单
+            Text("③来源（各自独立）", fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("微信", fontSize = 13.sp, modifier = Modifier.weight(1f))
+                Switch(
+                    checked = wechat,
+                    enabled = on,
+                    onCheckedChange = {
+                        wechat = it
+                        MessageSettings.setWechatOn(context, it)
+                    }
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("QQ", fontSize = 13.sp, modifier = Modifier.weight(1f))
+                Switch(
+                    checked = qq,
+                    enabled = on,
+                    onCheckedChange = {
+                        qq = it
+                        MessageSettings.setQqOn(context, it)
+                    }
+                )
+            }
+
+            // ④ 外发计数（透明可查）
+            Text(
+                "④本月已外发：$sent 条" +
+                    if (sent == 0) "（没有原文出过本机）" else "（这些消息原文发到过云端）",
+                fontSize = 12.sp,
+                color = if (sent == 0) MaterialTheme.colorScheme.onSurfaceVariant else LuyuanColors.Amber
+            )
+            Text(
+                "只处理私聊；群消息、广告、闲聊一律跳过。误报比漏报更伤，宁可漏。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

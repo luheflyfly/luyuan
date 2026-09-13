@@ -27,6 +27,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -288,7 +289,8 @@ fun NoteListScreen(
     onRecord: () -> Unit,
     onDetail: (String) -> Unit,
     onSettings: () -> Unit,
-    onTrash: () -> Unit
+    onTrash: () -> Unit,
+    onReview: () -> Unit = {}
 ) {
     val notes by vm.notes.collectAsStateWithLifecycle()
     val moodEnabled by vm.moodEnabled.collectAsStateWithLifecycle()
@@ -308,8 +310,31 @@ fun NoteListScreen(
     val scope = rememberCoroutineScope()
     val keyboard = LocalSoftwareKeyboardController.current
 
+    // 消息待办 · 待确认（立项单 T3）：备用机监听到的消息经云端抽取后先落这里，
+    // 用户点 ✓ 才写成正式 todo_<id>.json 同步回电脑；✗ 直接丢。
+    var pendingTodos by remember { mutableStateOf(com.luyuan.data.PendingMessageTodoStore.list(context)) }
+
+    fun confirmPendingTodo(p: com.luyuan.data.PendingMessageTodo) {
+        try {
+            val t = com.luyuan.data.TodoStore.fromPending(p)
+            com.luyuan.data.TodoStore.write(context, t)
+        } catch (_: Exception) {
+        }
+        com.luyuan.data.PendingMessageTodoStore.remove(context, p.id)
+        pendingTodos = com.luyuan.data.PendingMessageTodoStore.list(context)
+        vm.refresh()
+    }
+
+    fun discardPendingTodo(p: com.luyuan.data.PendingMessageTodo) {
+        com.luyuan.data.PendingMessageTodoStore.remove(context, p.id)
+        pendingTodos = com.luyuan.data.PendingMessageTodoStore.list(context)
+    }
+
     // 每次回到列表都重新读盘，授权后/同步后立刻可见
-    LaunchedEffect(Unit) { vm.refresh() }
+    LaunchedEffect(Unit) {
+        vm.refresh()
+        pendingTodos = com.luyuan.data.PendingMessageTodoStore.list(context)
+    }
 
     val filtered = remember(notes, query) {
         if (query.isBlank()) notes else notes.filter {
@@ -404,6 +429,9 @@ fun NoteListScreen(
                             tint = if (moodEnabled) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+                    IconButton(onClick = onReview) {
+                        Icon(Icons.Default.BarChart, contentDescription = "本周回顾")
                     }
                     IconButton(onClick = onTrash) {
                         Icon(Icons.Default.DeleteOutline, contentDescription = "回收站")
@@ -524,6 +552,16 @@ fun NoteListScreen(
                         .padding(horizontal = 12.dp)
                         .padding(top = 4.dp)
                 ) {
+                    // 消息待办 · 待确认（置顶：需要用户裁决，别让它在列表里被淹没）
+                    if (pendingTodos.isNotEmpty()) {
+                        item(key = "pending_todos_${pendingTodos.size}") {
+                            PendingTodoSection(
+                                items = pendingTodos,
+                                onConfirm = { confirmPendingTodo(it) },
+                                onDiscard = { discardPendingTodo(it) }
+                            )
+                        }
+                    }
                     for (g in groups) {
                         item(key = "h_${g.label}_${g.notes.size}") {
                             // 多选态：点日期分组头 = 选/不选这一整天（稿 multiselect.html「按日期全选」）
@@ -759,4 +797,130 @@ private fun remindBadge(note: Note) {
         }
     }
     Badge("⏰ $shown", Color(0xFFD97706))
+}
+
+// ---------- 消息待办 · 待确认（立项单 2026-09-13 T3） ----------
+
+/**
+ * 置顶的待确认区：备用机监听到的微信/QQ 消息，经云端抽取后落在这里。
+ * 用户点 ✓ 才写成正式 todo_<id>.json（同步回电脑），✗ 直接丢。分级确认是全项目命门。
+ */
+@Composable
+private fun PendingTodoSection(
+    items: List<com.luyuan.data.PendingMessageTodo>,
+    onConfirm: (com.luyuan.data.PendingMessageTodo) -> Unit,
+    onDiscard: (com.luyuan.data.PendingMessageTodo) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "📬 消息待办 · 待确认",
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 13.5.sp,
+                color = LuyuanColors.Amber
+            )
+            Spacer(Modifier.size(8.dp))
+            Text(
+                "${items.size} 条",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        for (p in items) {
+            PendingTodoCard(p, onConfirm, onDiscard)
+        }
+    }
+}
+
+@Composable
+private fun PendingTodoCard(
+    p: com.luyuan.data.PendingMessageTodo,
+    onConfirm: (com.luyuan.data.PendingMessageTodo) -> Unit,
+    onDiscard: (com.luyuan.data.PendingMessageTodo) -> Unit
+) {
+    val srcName = if (p.source == "wechat") "微信" else "QQ"
+    val time = runCatching {
+        OffsetDateTime.parse(p.created_at).toLocalDateTime()
+            .format(DateTimeFormatter.ofPattern("HH:mm"))
+    }.getOrDefault("")
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
+            .border(1.dp, LuyuanColors.Amber, RoundedCornerShape(12.dp))
+    ) {
+        // 头：来源行（琥珀底）
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+                .background(
+                    LuyuanColors.AmberBg,
+                    RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
+                )
+                .padding(horizontal = 12.dp, vertical = 5.dp)
+        ) {
+            Box(Modifier.size(6.dp).background(LuyuanColors.Amber, CircleShape))
+            Spacer(Modifier.size(6.dp))
+            Text(
+                "来自 $srcName" +
+                    (if (p.sender.isNotBlank()) " · ${p.sender}" else "") +
+                    (if (time.isNotBlank()) " · $time" else ""),
+                fontSize = 9.5.sp,
+                color = LuyuanColors.Amber
+            )
+        }
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            // 抽出来的事项（主角）
+            Text(
+                p.text,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = LuyuanColors.Ink1
+            )
+            if (p.whenText.isNotBlank()) {
+                Text(
+                    "时间：${p.whenText}",
+                    fontSize = 11.sp,
+                    color = LuyuanColors.Ink2
+                )
+            }
+            // 原文（核对用，最多两行）
+            if (p.raw.isNotBlank()) {
+                Text(
+                    "原文：${p.raw}",
+                    fontSize = 10.5.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2
+                )
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(top = 2.dp)
+            ) {
+                Button(
+                    onClick = { onConfirm(p) },
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp)
+                ) {
+                    Text("✓ 收下", fontSize = 12.sp)
+                }
+                Button(
+                    onClick = { onDiscard(p) },
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = LuyuanColors.Green50,
+                        contentColor = LuyuanColors.Ink2
+                    ),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp)
+                ) {
+                    Text("✗ 不要", fontSize = 12.sp)
+                }
+            }
+        }
+    }
 }

@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -87,6 +88,8 @@ fun AskScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var confirmClear by remember { mutableStateOf(false) }
+    // 私密内容外发授权（立项单 2026-09-13 红线变更）：默认不勾，勾了本次才把「私密」标签笔记一并发出
+    var includePrivate by remember { mutableStateOf(false) }
 
     data class PendingImg(val bmp: Bitmap, val dataUrl: String)
     val pending = remember { mutableStateListOf<PendingImg>() }
@@ -120,7 +123,7 @@ fun AskScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
             val answer = try {
                 withContext(Dispatchers.IO) {
                     val cfg = AskRemote.loadConfig(context)
-                    AskRemote.ask(cfg, model, q, imgs, history, AskRemote.buildContext(context))
+                    AskRemote.ask(cfg, model, q, imgs, history, AskRemote.buildContext(context, includePrivate))
                 }
             } catch (e: Exception) {
                 error = e.message ?: "请求失败"
@@ -196,7 +199,8 @@ fun AskScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
 
             if (messages.isEmpty() && !busy) {
                 Text(
-                    "问点什么，我会参考你本机最近的笔记和待办（私密标签的笔记不会发出去）。\n" +
+                    "问点什么，我会参考你本机最近的笔记和待办（私密标签的笔记默认不发出去，\n" +
+                        "需要时可在输入框上方勾选『包含私密内容』）。\n" +
                         "要发图片请先切到 👁 视觉模型。API Key 在「设置 → 问路远」里填。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -287,6 +291,34 @@ fun AskScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
                                 .clickable { pending.remove(p) }
                         )
                     }
+                }
+            }
+            // ---------- 私密内容外发授权（立项单红线变更：默认不外发，用户勾了本次才发） ----------
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp)
+            ) {
+                Checkbox(
+                    checked = includePrivate,
+                    onCheckedChange = { includePrivate = it },
+                    modifier = Modifier.size(30.dp)
+                )
+                Column {
+                    Text(
+                        "包含私密内容",
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = if (includePrivate) LuyuanColors.Amber
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        if (includePrivate) "本次会把「私密」标签的笔记一起发给云端"
+                        else "默认只发普通笔记，「私密」标签的不外发",
+                        fontSize = 9.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
             // ---------- 输入行：🖼 图片 + 文本 + 发送 ----------
