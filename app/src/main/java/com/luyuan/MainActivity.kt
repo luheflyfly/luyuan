@@ -4,10 +4,14 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -155,14 +159,30 @@ fun AppRoot(startDest: String) {
     var searchMode by remember { mutableStateOf(false) }
     val searchQuery by vm.searchQuery.collectAsStateWithLifecycle()
     val multiSelect by vm.multiSelect.collectAsStateWithLifecycle()
+    // left-ia（路河 09:57 口径）：笔记左缘右滑→问路远（一层）→再滑→设置（二层盖上层）；返回反向逐层收
+    var showAsk by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
+    BackHandler(enabled = showSettings) { showSettings = false }
+    BackHandler(enabled = showAsk && !showSettings) { showAsk = false }
     val ctx = LocalContext.current
     // 超级输入框 v3（Q13 拍板）：点胶囊向下展开，展开态才有输入框+三按钮；草稿走 prefs
     var expanded by remember { mutableStateOf(false) }
     val draftPrefs = remember { ctx.getSharedPreferences("luyuan_prefs", android.content.Context.MODE_PRIVATE) }
     var inputText by remember { mutableStateOf(draftPrefs.getString("terminal_draft", "") ?: "") }
-    var showSettings by remember { mutableStateOf(false) }
     // 胶囊在根 Box 坐标系里的矩形（用于「点空白收起」判定落点，避免抢胶囊的点击/焦点）
     var capsuleRect by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+
+    // 首启引导（v2/onboarding.html 施工）：只在首次启动出现；完成=落笔记页+胶囊展开（深链 auto=note 同款）
+    val onboardPrefs = remember { ctx.getSharedPreferences("luyuan_prefs", android.content.Context.MODE_PRIVATE) }
+    var onboarded by remember { mutableStateOf(onboardPrefs.getBoolean("onboarding_done", false)) }
+    if (!onboarded) {
+        com.luyuan.ui.OnboardingScreen(vm = vm, onDone = {
+            onboardPrefs.edit().putBoolean("onboarding_done", true).apply()
+            onboarded = true
+            expanded = true
+        })
+        return
+    }
 
     // Q12（路河拍板「入口两个、存储一处」）：终端把内容存进今天日记后，给一条可点回执
     // 「📔 已存入今天的日记 · 去看看」→ 点一下跳日记页，4 秒后自动消失
@@ -291,8 +311,9 @@ fun AppRoot(startDest: String) {
                                     nav.navigate("record") { launchSingleTop = true }
                                 },
                                 onDetail = { id -> nav.navigate("detail/$id") },
-                                onSettings = { showSettings = true }, // 左滑/顶栏⚙ → 右侧抽屉（不占满全屏）
-                                onTrash = { nav.navigate("trash") }
+                                onSettings = { showSettings = true }, // 顶栏⚙ → 左侧抽屉第二层（left-ia）
+                                onTrash = { nav.navigate("trash") },
+                                onReview = { nav.navigate("review") } // 顶栏📊 → 本周回顾（只读）
                             )
                             1 -> LedgerScreen(
                                 vm = vm,
@@ -302,7 +323,8 @@ fun AppRoot(startDest: String) {
                             2 -> CourseScreen(
                                 vm = vm,
                                 onAsk = { nav.navigate("ask") },
-                                onTrash = { nav.navigate("trash") }
+                                onTrash = { nav.navigate("trash") },
+                                onDetail = { nav.navigate("detail/$it") } // B5：作业清单点进笔记详情
                             )
                             3 -> JournalScreen(vm = vm, onRecord = {
                                 vm.startWavRecording()
@@ -342,6 +364,9 @@ fun AppRoot(startDest: String) {
                 }
                 composable("trash") {
                     TrashScreen(vm = vm, onBack = { nav.popBackStack() })
+                }
+                composable("review") {
+                    com.luyuan.ui.ReviewScreen(vm = vm, onBack = { nav.popBackStack() })
                 }
             }
             // 点击空白处收起展开态 + 收键盘（路河 09-10 反馈：别只靠输入法收起）
@@ -460,101 +485,133 @@ fun AppRoot(startDest: String) {
                         }
                 )
             }
-            // 笔记页【左缘】右滑 → 设置抽屉（路河 09-10 拍板：从左边呼出，别跟右边记账页手势冲突）
-            // 09-10 二改：detectHorizontalDragGestures 会被外层 HorizontalPager 抢走（同为横向拖拽，
-            // Pager 层级更深且是滚动容器，必输）→ 改为自行解析指针事件：
-            // 只认「首段位移明确横向向右」的滑动，一旦判定纵向就立刻放行给列表，不再 consume。
+            // 笔记页【左缘】右滑 → 问路远抽屉（left-ia 一层；设置=二层在问路远上再滑）。
             // 09-13 夜修「滑动切页不行」：这条覆盖层是 hit-target，压在 Pager 上方——从它起手的
-            // 手势（右滑/左滑/竖滑）被 hit-test 全部判给它，Pager 根本收不到，等于屏幕左缘一条
-            // 36dp 宽的手势黑洞。收窄到 16dp 只守住系统返回手势的边缘地带；从条上左滑离手时
-            // 手动翻到下一页（事件无法转发给 Pager，只能代为执行），右滑逻辑不变。
-            if (currentRoute == "home" && pagerState.currentPage == 0 && !showSettings) {
+            // 手势被 hit-test 全部判给它，等于屏幕左缘一条 36dp 宽的手势黑洞。收窄到 16dp 只守
+            // 系统返回手势的边缘地带；条上左滑离手时手动翻下一页（事件无法转发给 Pager）。
+            if (currentRoute == "home" && pagerState.currentPage == 0 && !showAsk && !showSettings) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.CenterStart)
                         .fillMaxHeight()
                         .width(16.dp)
                         .zIndex(5f)
-                        // 09-11 修「左缘右滑无反应」：Android 10+ 把「从屏幕左边缘往右滑」当
-                        // 系统返回手势拦截，App 内手势写得再好也收不到事件。必须主动向系统
-                        // 申请豁免（exclusion），该区域才归 App。（系统限制：排除区最高约 200dp，
-                        // 系统会自动截取，够用）
-                        .systemGestureExclusion()
-                        .pointerInput(Unit) {
-                            awaitEachGesture {
-                                val down = awaitFirstDown(
-                                    requireUnconsumed = false,
-                                    pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial
-                                )
-                                var totalDx = 0f
-                                var totalDy = 0f
-                                var decided = false   // 方向是否已判定
-                                var isRight = false   // 是否判定为「右滑呼出设置」
-                                while (true) {
-                                    // Initial pass：抢在子级（HorizontalPager）之前拿到事件，否则必输
-                                    val ev = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
-                                    val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
-                                    if (!ch.pressed) {
-                                        // 抬手：向右达到阈值呼出抽屉；向左达到阈值翻下一页
-                                        if (isRight && totalDx > 40f) {
-                                            showSettings = true
-                                        } else if (!isRight && totalDx < -60f &&
-                                            pagerState.currentPage < 4
-                                        ) {
-                                            scope.launch {
-                                                pagerState.animateScrollToPage(
-                                                    pagerState.currentPage + 1
-                                                )
-                                            }
-                                        }
-                                        break
-                                    }
-                                    totalDx += ch.positionChange().x
-                                    totalDy += ch.positionChange().y
-                                    if (!decided) {
-                                        val adx = kotlin.math.abs(totalDx)
-                                        val ady = kotlin.math.abs(totalDy)
-                                        if (adx > 12f || ady > 12f) {
-                                            decided = true
-                                            // 横向且向右 → 接管；否则彻底放行（不 consume，交还给 Pager/列表）
-                                            isRight = adx > ady && totalDx > 0f
-                                        }
-                                    }
-                                    if (decided && isRight) {
-                                        ch.consume()
-                                    } else if (decided) {
-                                        break
-                                    }
+                        .edgeGestureStrip(
+                            onRight = { showAsk = true },
+                            onLeft = {
+                                if (pagerState.currentPage < 4) {
+                                    scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
                                 }
                             }
-                        }
+                        )
                 )
             }
         }
     }
 
-    // 设置抽屉（左侧滑入，不占满全屏——路河 09-10 拍板）
-    if (showSettings) {
+    // 左侧两级抽屉（left-ia · 路河 09:57 口径）：一层问路远（84%），二层设置（78%）盖在上层；
+    // 返回键逐层收（BackHandler 在上方）；点遮罩全收。右侧完全不碰（那是 Pager 翻页方向）。
+    if (showAsk || showSettings) {
         Box(Modifier.fillMaxSize()) {
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(androidx.compose.ui.graphics.Color(0x66000000))
-                    .clickable { showSettings = false }
+                    .background(androidx.compose.ui.graphics.Color(0x52000000))
+                    .clickable { showAsk = false; showSettings = false }
             )
-            Box(
+            AnimatedVisibility(
+                visible = showAsk,
+                enter = slideInHorizontally(initialOffsetX = { -it }) + fadeIn(),
                 modifier = Modifier
                     .align(Alignment.CenterStart)
                     .fillMaxHeight()
-                    .fillMaxWidth(0.88f)
+                    .fillMaxWidth(0.84f)
             ) {
-                SettingsScreen(
-                    vm = vm,
-                    onBack = { showSettings = false },
-                    onAsk = { showSettings = false; nav.navigate("ask") },
-                    onAskKey = { showSettings = false; nav.navigate("askkey") }
-                )
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background)
+                ) {
+                    com.luyuan.ui.AskScreen(vm = vm, onBack = { showAsk = false })
+                    // 一层抽屉的左缘：再右滑 → 呼出二层设置
+                    if (!showSettings) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.CenterStart)
+                                .fillMaxHeight()
+                                .width(24.dp)
+                                .edgeGestureStrip(onRight = { showSettings = true })
+                        )
+                    }
+                }
+            }
+            AnimatedVisibility(
+                visible = showSettings,
+                enter = slideInHorizontally(initialOffsetX = { -it }) + fadeIn(),
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .fillMaxHeight()
+                    .fillMaxWidth(0.78f)
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background)
+                ) {
+                    SettingsScreen(
+                        vm = vm,
+                        onBack = { showSettings = false },
+                        onAsk = { showSettings = false; showAsk = true },
+                        onAskKey = { showSettings = false; nav.navigate("askkey") }
+                    )
+                }
             }
         }
     }
 }
+
+/**
+ * 左缘手势带（left-ia）：右滑离手→onRight（呼出抽屉），左滑离手→onLeft（可选，代 Pager 翻页）。
+ * 必须挂在压住内容上方的窄条上：它是 hit-target，宽了会吞掉 Pager 手势（09-13 夜 36dp 黑洞教训）。
+ * 判定：首段位移明确横向才接管（Initial pass 抢在 Pager 前），纵向立刻放行；系统返回手势用
+ * systemGestureExclusion 申请豁免（Android 10+ 左缘右滑默认归系统）。
+ */
+private fun Modifier.edgeGestureStrip(onRight: () -> Unit, onLeft: () -> Unit = {}): Modifier =
+    this
+        .systemGestureExclusion()
+        .pointerInput(Unit) {
+            awaitEachGesture {
+                val down = awaitFirstDown(
+                    requireUnconsumed = false,
+                    pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial
+                )
+                var totalDx = 0f
+                var totalDy = 0f
+                var decided = false
+                var isRight = false
+                while (true) {
+                    val ev = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                    val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
+                    if (!ch.pressed) {
+                        if (isRight && totalDx > 40f) onRight()
+                        else if (!isRight && totalDx < -60f) onLeft()
+                        break
+                    }
+                    totalDx += ch.positionChange().x
+                    totalDy += ch.positionChange().y
+                    if (!decided) {
+                        val adx = kotlin.math.abs(totalDx)
+                        val ady = kotlin.math.abs(totalDy)
+                        if (adx > 12f || ady > 12f) {
+                            decided = true
+                            isRight = adx > ady && totalDx > 0f
+                        }
+                    }
+                    if (decided && isRight) {
+                        ch.consume()
+                    } else if (decided) {
+                        break
+                    }
+                }
+            }
+        }
