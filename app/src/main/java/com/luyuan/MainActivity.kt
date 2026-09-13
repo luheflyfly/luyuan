@@ -164,6 +164,19 @@ fun AppRoot(startDest: String) {
     var showSettings by remember { mutableStateOf(false) }
     BackHandler(enabled = showSettings) { showSettings = false }
     BackHandler(enabled = showAsk && !showSettings) { showAsk = false }
+    // 三级联动：主内容随层级平移+变暗（left-ia 稿 .main transform：86px=问路远层、60px=设置层、透明度 .55）
+    val drawerShift by androidx.compose.animation.core.animateDpAsState(
+        when {
+            showSettings -> 60.dp
+            showAsk -> 86.dp
+            else -> 0.dp
+        },
+        label = "drawerShift"
+    )
+    val drawerDim by androidx.compose.animation.core.animateFloatAsState(
+        if (showAsk || showSettings) 0.55f else 1f,
+        label = "drawerDim"
+    )
     val ctx = LocalContext.current
     // 超级输入框 v3（Q13 拍板）：点胶囊向下展开，展开态才有输入框+三按钮；草稿走 prefs
     var expanded by remember { mutableStateOf(false) }
@@ -292,7 +305,13 @@ fun AppRoot(startDest: String) {
         ) {
             NavHost(
                 navController = nav,
-                startDestination = "home"
+                startDestination = "home",
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        translationX = drawerShift.toPx()
+                        alpha = drawerDim
+                    }
             ) {
                 composable("home") {
                     // 09-10 治卡顿：beyondBoundsPageCount 4 -> 1。
@@ -504,6 +523,19 @@ fun AppRoot(startDest: String) {
                                 }
                             }
                         )
+                )
+            }
+            // 左缘竖排小提示（left-ia 稿 hint-l）：只在主页笔记页、无抽屉时显示
+            if (currentRoute == "home" && pagerState.currentPage == 0 && !showAsk && !showSettings && !multiSelect) {
+                Text(
+                    "‹ 左边缘右滑",
+                    fontSize = 9.sp,
+                    letterSpacing = 2.sp,
+                    color = LuyuanColors.Ink4.copy(alpha = 0.75f),
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .padding(start = 22.dp)
+                        .graphicsLayer { rotationZ = -90f }
                 )
             }
         }

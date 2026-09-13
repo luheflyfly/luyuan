@@ -136,11 +136,12 @@ class TodayWidgetProvider : AppWidgetProvider() {
         val notes = try { NoteRepository.listNotes(context) } catch (_: Throwable) { emptyList() }
         val expenses = try { V2EntityRepository.listExpenses(context) } catch (_: Throwable) { emptyList() }
 
-        // ---- 1 标题行：日期 ----
+        // ---- 1 标题行：日期 + 开学第 N 周（锚点=2026-09-14 新生第一周周一，校历 csu_luyuan_data.json，prefers 可覆盖见 domain/Semester.kt） ----
         views.setTextViewText(
             R.id.widget_date,
             try {
-                java.text.SimpleDateFormat("M月d日 E", Locale.CHINA).format(java.util.Date())
+                java.text.SimpleDateFormat("M月d日 E", Locale.CHINA).format(java.util.Date()) +
+                    " · 第" + com.luyuan.domain.semesterWeekOf(java.time.LocalDate.now()) + "周"
             } catch (_: Exception) { "" }
         )
 

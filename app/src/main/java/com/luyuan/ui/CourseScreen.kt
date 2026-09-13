@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -74,12 +75,32 @@ import java.util.Locale
  * 数据 = SYNC_FORMAT v2 kind:"course"；作业 = 打了课程名标签的笔记（§10.1 归课约定，不新增实体）。
  */
 
-private val CoursePalette = listOf(
-    Color(0xFF4F8A73), // 深绿
-    Color(0xFF6D28D9), // 紫
-    Color(0xFFB45309), // 金
-    Color(0xFFBE185D)  // 洋红
-)
+// 木案四分类（course-muan.html 图例口径）：颜色=稿面原值；按课名关键词确定性归类，不新增数据字段
+internal const val CAT_MATH = "数学"
+internal const val CAT_MAJOR = "专业"
+internal const val CAT_PUBLIC = "公共"
+internal const val CAT_PE = "体艺"
+
+internal fun courseCategory(name: String): String {
+    val n = name
+    return when {
+        listOf("体育", "羽毛球", "篮球", "足球", "游泳", "健身", "音乐", "美术", "舞蹈", "艺术")
+            .any { n.contains(it) } -> CAT_PE
+        listOf("数学", "高数", "微积分", "线性代", "概率", "统计")
+            .any { n.contains(it) } -> CAT_MATH
+        listOf("大学英语", "英语", "思政", "毛概", "马原", "军事", "心理", "就业", "形势")
+            .any { n.contains(it) } -> CAT_PUBLIC
+        else -> CAT_MAJOR
+    }
+}
+
+internal fun categoryColor(cat: String): Color = when (cat) {
+    CAT_MATH -> Color(0xFF4F8A73)   // 数学 · 深绿
+    CAT_PUBLIC -> Color(0xFFB45309) // 公共 · 金
+    CAT_PE -> Color(0xFFBE185D)     // 体艺 · 洋红
+    else -> Color(0xFF6D28D9)       // 专业 · 紫
+}
+
 private const val GRID_CELL_W = 62
 private const val GRID_TIME_W = 34
 private const val GRID_CELL_H = 56
@@ -96,11 +117,11 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
     val prefs = remember { context.getSharedPreferences("luyuan_prefs", Context.MODE_PRIVATE) }
     val today = remember { LocalDate.now() }
 
-    // 学期周次锚点：App 内保存过就用它（PC config.semester_start 的手机自治兜底=9/1 或 3/1）
+    // 学期周次锚点：prefs 优先；默认=中南校历新生第一周周一 2026-09-14（domain/Semester.kt，2026 级口径）
     val start = remember(prefs) { semesterStart(today, prefs) }
     val curWeek = remember(start, today) { weekOf(start, today).coerceIn(1, 30) }
     var week by remember { mutableStateOf(curWeek) }
-    var selCourse by remember { mutableStateOf<String?>(null) } // 图例筛选（单选，再点取消）
+    var selCat by remember { mutableStateOf<String?>(null) } // 图例筛选（四分类单选，再点取消）
     var addSlot by remember { mutableStateOf<AddSlot?>(null) }
     var hwDialog by remember { mutableStateOf(false) }
 
@@ -112,8 +133,7 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
     val courseNames = remember(courses) {
         courses.map { it.name }.filter { it.isNotBlank() }.distinct().sorted().take(8)
     }
-    fun colorOf(name: String): Color =
-        CoursePalette[courseNames.indexOf(name).mod(CoursePalette.size)]
+    val nowT = remember { LocalTime.now() }
 
     val totalWeeks = remember(courses) {
         var mx = 0
@@ -322,7 +342,7 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                                         val cell = weekCourses.firstOrNull {
                                             it.weekday == i && it.start == s
                                         }
-                                        val dimmed = selCourse != null && cell != null && cell.name != selCourse
+                                        val dimmed = selCat != null && cell != null && courseCategory(cell.name) != selCat
                                         Box(
                                             contentAlignment = Alignment.Center,
                                             modifier = Modifier
@@ -333,10 +353,10 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                                                     MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
                                                 )
                                                 .background(
-                                                    when {
-                                                        isToday -> Color(0x1AB45309) // 金色淡染（今天列）
-                                                        else -> MaterialTheme.colorScheme.background
-                                                    }
+                                                    // 木案 today-col：金淡染渐变
+                                                    if (isToday) Brush.verticalGradient(
+                                                        listOf(Color(0x26B45309), Color(0x05B45309))
+                                                    ) else SolidColor(MaterialTheme.colorScheme.background)
                                                 )
                                                 .clickable(enabled = cell == null && isToday) {
                                                     val end = parseHm(s)?.plusMinutes(45)?.toString()?.take(5)
@@ -344,8 +364,14 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                                                 }
                                         ) {
                                             if (cell != null) {
-                                                val cc = colorOf(cell.name)
-                                                Column(
+                                                val cc = categoryColor(courseCategory(cell.name))
+                                                // 木案 .cc：左侧 3dp 分类色条 + 课名两行 + @教室（进行中标注）
+                                                val ongoing = isToday && run {
+                                                    val s2 = parseHm(cell.start)
+                                                    val e2 = parseHm(cell.end)
+                                                    s2 != null && e2 != null && !s2.isAfter(nowT) && e2.isAfter(nowT)
+                                                }
+                                                Row(
                                                     Modifier
                                                         .fillMaxSize()
                                                         .padding(3.dp)
@@ -353,34 +379,34 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                                                             cc.copy(alpha = if (dimmed) 0.04f else 0.10f),
                                                             RoundedCornerShape(7.dp)
                                                         )
-                                                        .padding(horizontal = 4.dp, vertical = 3.dp)
                                                 ) {
                                                     Box(
                                                         Modifier
-                                                            .width(14.dp)
-                                                            .height(2.dp)
+                                                            .width(3.dp)
+                                                            .fillMaxHeight()
                                                             .background(
                                                                 cc.copy(alpha = if (dimmed) 0.3f else 1f),
                                                                 RoundedCornerShape(2.dp)
                                                             )
                                                     )
-                                                    Spacer(Modifier.height(2.dp))
-                                                    Text(
-                                                        cell.name,
-                                                        fontSize = 9.sp,
-                                                        fontWeight = FontWeight.SemiBold,
-                                                        color = if (dimmed) LuyuanColors.Ink4 else LuyuanColors.Ink1,
-                                                        maxLines = 2,
-                                                        overflow = TextOverflow.Ellipsis,
-                                                        lineHeight = 11.sp
-                                                    )
-                                                    Text(
-                                                        "@" + coursePlaceLine(cell),
-                                                        fontSize = 8.sp,
-                                                        color = LuyuanColors.Ink4,
-                                                        maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis
-                                                    )
+                                                    Column(Modifier.padding(horizontal = 4.dp, vertical = 3.dp)) {
+                                                        Text(
+                                                            cell.name,
+                                                            fontSize = 9.sp,
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            color = if (dimmed) LuyuanColors.Ink4 else LuyuanColors.Ink1,
+                                                            maxLines = 2,
+                                                            overflow = TextOverflow.Ellipsis,
+                                                            lineHeight = 11.sp
+                                                        )
+                                                        Text(
+                                                            "@" + coursePlaceLine(cell) + if (ongoing) " · 现在进行" else "",
+                                                            fontSize = 8.sp,
+                                                            color = if (ongoing) cc else LuyuanColors.Ink4,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                    }
                                                 }
                                             } else if (isToday) {
                                                 Text("＋", fontSize = 13.sp, color = LuyuanColors.Ink4)
@@ -404,9 +430,9 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                             .horizontalScroll(rememberScrollState())
                             .padding(vertical = 2.dp)
                     ) {
-                        for (n in courseNames) {
-                            val on = selCourse == n
-                            val cc = colorOf(n)
+                        for (cat in listOf(CAT_MATH, CAT_MAJOR, CAT_PUBLIC, CAT_PE)) {
+                            val on = selCat == cat
+                            val cc = categoryColor(cat)
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
@@ -415,14 +441,14 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                                         RoundedCornerShape(999.dp)
                                     )
                                     .border(1.5.dp, cc, RoundedCornerShape(999.dp))
-                                    .clickable { selCourse = if (on) null else n }
+                                    .clickable { selCat = if (on) null else cat }
                                     .padding(horizontal = 10.dp, vertical = 4.dp)
                             ) {
                                 Box(
                                     Modifier.size(6.dp).background(cc, RoundedCornerShape(3.dp))
                                 )
                                 Spacer(Modifier.width(4.dp))
-                                Text(n, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = cc)
+                                Text("● $cat", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = cc)
                             }
                         }
                     }
@@ -525,7 +551,7 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                                 "[$tag]",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = colorOf(tag)
+                                color = categoryColor(courseCategory(tag))
                             )
                             Spacer(Modifier.width(6.dp))
                             Text(
@@ -796,8 +822,8 @@ internal fun semesterStart(today: LocalDate, prefs: android.content.SharedPrefer
         } catch (_: Exception) {
         }
     }
-    return if (today.monthValue >= 8) LocalDate.of(today.year, 9, 1)
-    else LocalDate.of(today.year, 3, 1)
+    // 默认锚点=中南校历新生第一周周一 2026-09-14（domain/Semester.kt，2026 级口径）
+    return com.luyuan.domain.semesterStartDefault()
 }
 
 /** 学期第几周（锚点所在周=第 1 周） */
