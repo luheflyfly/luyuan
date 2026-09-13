@@ -63,6 +63,7 @@ import com.luyuan.data.ContactTodo
 import kotlinx.coroutines.launch
 
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardActions
@@ -128,6 +129,10 @@ fun PeopleScreen(vm: LuyuanViewModel, onNoteClick: (String) -> Unit = {}) {
     val notes by vm.notes.collectAsStateWithLifecycle()
     var query by remember { mutableStateOf("") }
     var detail by remember { mutableStateOf<Contact?>(null) }
+    // B4（SYNC_FORMAT v3）：分组 chips + 排序。selGroup=null=全部（拼音字母分组）；
+    // 选中分组默认按学号升序（无学号排最后），可切回拼音（PC 端同口径）
+    var selGroup by remember { mutableStateOf<String?>(null) }
+    var bySid by remember { mutableStateOf(true) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { vm.refresh() }
@@ -137,7 +142,18 @@ fun PeopleScreen(vm: LuyuanViewModel, onNoteClick: (String) -> Unit = {}) {
         else contacts.filter { it.name.contains(query.trim(), ignoreCase = true) }
     }
     val todoContacts = filtered.filter { it.undoneTodos.isNotEmpty() }
-    val grouped = remember(filtered) { filtered.groupBy { it.displayLetter }.toSortedMap() }
+    val allGroups = remember(contacts) {
+        contacts.map { it.group }.filter { it.isNotBlank() }.distinct().sorted()
+    }
+    val inGroup = remember(filtered, selGroup) {
+        if (selGroup == null) filtered else filtered.filter { it.group == selGroup }
+    }
+    val showSid = selGroup != null && bySid
+    val sidSorted = remember(inGroup) {
+        val collator = java.text.Collator.getInstance(java.util.Locale.CHINA)
+        inGroup.sortedWith(compareBy({ it.sidSortKey }, { collator.getCollationKey(it.name) }))
+    }
+    val grouped = remember(inGroup) { inGroup.groupBy { it.displayLetter }.toSortedMap() }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("人脉", fontWeight = FontWeight.Bold) }) }
@@ -150,10 +166,36 @@ fun PeopleScreen(vm: LuyuanViewModel, onNoteClick: (String) -> Unit = {}) {
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)
             )
-            if (filtered.isEmpty()) {
+            // ---------- 分组 chips（B4）：全部 / 各分组 / 排序切换 ----------
+            if (allGroups.isNotEmpty()) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 12.dp, vertical = 2.dp)
+                ) {
+                    GroupChip(label = "全部", selected = selGroup == null) { selGroup = null }
+                    for (g in allGroups) {
+                        GroupChip(
+                            label = g,
+                            selected = selGroup == g
+                        ) { selGroup = if (selGroup == g) null else g }
+                    }
+                    if (selGroup != null) {
+                        GroupChip(
+                            label = if (bySid) "按学号 ✓" else "按拼音",
+                            selected = bySid
+                        ) { bySid = !bySid }
+                    }
+                }
+            }
+            if (inGroup.isEmpty()) {
                 EmptyState(
                     icon = if (contacts.isEmpty()) EmptyIconPeople else EmptyIconSearch,
-                    title = if (contacts.isEmpty()) "还没有联系人" else "没有匹配「${query.trim()}」的联系人",
+                    title = if (contacts.isEmpty()) "还没有联系人"
+                    else if (query.isNotBlank()) "没有匹配「${query.trim()}」的联系人"
+                    else "这个分组还没有联系人",
                     subtitle = if (contacts.isEmpty())
                         "电脑端人脉页添加后会自动同步到这里（共享目录 contacts/ 文件夹）。"
                     else null
@@ -216,68 +258,46 @@ fun PeopleScreen(vm: LuyuanViewModel, onNoteClick: (String) -> Unit = {}) {
                             }
                         }
                     }
-                    // ---------- 联系人板块（按字母分组） ----------
+                    // ---------- 联系人板块（选分组按学号=平铺无字母头；否则按字母分组） ----------
                     item(key = "sec_all") {
                         Text(
-                            "联系人 ${filtered.size}",
+                            if (selGroup == null) "联系人 ${inGroup.size}"
+                            else "$selGroup ${inGroup.size} 人 · " + if (showSid) "按学号" else "按拼音",
                             fontWeight = FontWeight.ExtraBold,
                             color = Color(0xFF374151),
                             fontSize = 14.sp,
                             modifier = Modifier.padding(top = 10.dp, bottom = 2.dp)
                         )
                     }
-                    for ((letter, list) in grouped) {
-                        item(key = "letter_$letter") {
-                            Text(
-                                letter,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontSize = 13.sp,
-                                modifier = Modifier.padding(top = 8.dp)
-                            )
-                        }
-                        for (c in list) {
+                    if (showSid) {
+                        // 按学号视图（PC 口径：不显示字母头与索引栏）
+                        for (c in sidSorted) {
                             item(key = "c_${c.id}") {
-                                Card(
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                                    modifier = Modifier.fillMaxWidth().clickable { detail = c }
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp)
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(c.name, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                                            if (c.birthday.isNotBlank() || c.phone.isNotBlank()) {
-                                                Text(
-                                                    listOfNotNull(
-                                                        c.phone.ifBlank { null },
-                                                        c.birthday.takeIf { it.isNotBlank() }
-                                                    ).joinToString("  "),
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                            }
-                                        }
-                                        if (c.undoneTodos.isNotEmpty()) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(9.dp)
-                                                    .background(Color(0xFFEF4444), CircleShape)
-                                            )
-                                        }
-                                    }
+                                PeopleContactCard(c = c, showSidBadge = true) { detail = c }
+                            }
+                        }
+                    } else {
+                        for ((letter, list) in grouped) {
+                            item(key = "letter_$letter") {
+                                Text(
+                                    letter,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontSize = 13.sp,
+                                    modifier = Modifier.padding(top = 8.dp)
+                                )
+                            }
+                            for (c in list) {
+                                item(key = "c_${c.id}") {
+                                    PeopleContactCard(c = c, showSidBadge = false) { detail = c }
                                 }
                             }
                         }
                     }
                     item(key = "bottom_pad") { Spacer(Modifier.height(10.dp)) }
                 }
-                // ---------- 字母索引条 ----------
-                if (grouped.isNotEmpty()) {
+                // ---------- 字母索引条（按学号视图隐藏，PC 同口径） ----------
+                if (grouped.isNotEmpty() && !showSid) {
                     Column(
                         verticalArrangement = Arrangement.Center,
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -331,6 +351,69 @@ fun PeopleScreen(vm: LuyuanViewModel, onNoteClick: (String) -> Unit = {}) {
             onNoteClick = onNoteClick
         )
     }
+}
+
+/** 联系人卡（B4 从列表内联抽出共用）：学号视图在副标题前加「学号N」，其余同旧版 */
+@Composable
+private fun PeopleContactCard(c: Contact, showSidBadge: Boolean, onClick: () -> Unit) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        modifier = Modifier.fillMaxWidth().clickable { onClick() }
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(c.name, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                val subtitle = listOfNotNull(
+                    c.sid.takeIf { it.isNotBlank() && showSidBadge }?.let { "学号$it" },
+                    c.phone.ifBlank { null },
+                    c.birthday.takeIf { it.isNotBlank() }
+                ).joinToString("  ")
+                if (subtitle.isNotBlank()) {
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            if (c.undoneTodos.isNotEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .size(9.dp)
+                        .background(Color(0xFFEF4444), CircleShape)
+                )
+            }
+        }
+    }
+}
+
+/** 分组 chip（B4）：纸白底圆角胶囊，选中变绿底绿字（沿用设置页目录卡的同款语言） */
+@Composable
+private fun GroupChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Text(
+        label,
+        fontSize = 12.sp,
+        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+        color = if (selected) MaterialTheme.colorScheme.primary else LuyuanColors.Ink2,
+        modifier = Modifier
+            .background(
+                if (selected) LuyuanColors.Green50 else MaterialTheme.colorScheme.surface,
+                RoundedCornerShape(999.dp)
+            )
+            .border(
+                1.dp,
+                if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                RoundedCornerShape(999.dp)
+            )
+            .clickable { onClick() }
+            .padding(horizontal = 12.dp, vertical = 5.dp)
+    )
 }
 
 @Composable

@@ -36,6 +36,10 @@ data class Contact(
     val qq: String = "",
     val birthday: String = "",
     val info: List<String> = emptyList(),
+    // SYNC_FORMAT v3（2026-09-13）：group=分组名（空=未分组），sid=学号（排序取前导数字）。
+    // 老文件缺这两个字段——解析层必须给默认值（kotlinx 缺键即抛的铁律）。
+    val group: String = "",
+    val sid: String = "",
     val todos: List<ContactTodo> = emptyList(),
     val created_at: String = "",
     val updated_at: String = ""
@@ -43,6 +47,10 @@ data class Contact(
     val undoneTodos: List<ContactTodo> get() = todos.filter { !it.done }
     val displayLetter: String
         get() = letter.ifBlank { initial.trim().uppercase().take(1) }.ifBlank { "#" }
+
+    /** 学号排序键：取前导数字（如「18号」→18）；无数字排最后，与 PC 端 contacts 口径一致 */
+    val sidSortKey: Long
+        get() = sid.trim().takeWhile { it.isDigit() }.toLongOrNull() ?: Long.MAX_VALUE
 }
 
 val contactJson: Json = Json {

@@ -41,6 +41,7 @@ data class Course(
     val weeks: String = "",         // "1-16"（周次过滤 PC 侧配 semester_start，App B1 不过滤）
     val semester: String = "",
     val device: String = "",
+    val schema: Int = 2,            // SYNC_FORMAT §10.1 课表实体格式版本
     val deleted: Boolean = false,
     val created_at: String = "",
     val updated_at: String = ""
@@ -91,5 +92,39 @@ object V2EntityRepository {
         }.sortedWith(compareBy({ it.weekday }, { it.start }))
     } catch (_: Exception) {
         emptyList()
+    }
+
+    /**
+     * 手机端加课（木案课表「点空格子=加课」，B5 2026-09-13）：写 course_<id前8位>.json 到同步根目录，
+     * 与 PC 导入产出的文件同格式同目录，Syncthing 双向互不冲突（各自独立文件）。
+     */
+    fun saveCourse(
+        context: Context,
+        name: String,
+        teacher: String,
+        place: String,
+        weekday: Int,
+        start: String,
+        end: String,
+        weeks: String
+    ): Course {
+        val now = java.time.OffsetDateTime.now().toString()
+        val c = Course(
+            kind = "course",
+            id = java.util.UUID.randomUUID().toString(),
+            name = name,
+            teacher = teacher,
+            place = place,
+            weekday = weekday,
+            start = start,
+            end = end,
+            weeks = weeks,
+            device = "phone",
+            created_at = now,
+            updated_at = now
+        )
+        val f = File(StorageLocator.getRoot(context), "course_" + c.id.take(8) + ".json")
+        f.writeText(v2Json.encodeToString(Course.serializer(), c), Charsets.UTF_8)
+        return c
     }
 }
