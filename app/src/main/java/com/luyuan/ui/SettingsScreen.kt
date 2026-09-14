@@ -351,9 +351,10 @@ fun SettingsScreen(vm: LuyuanViewModel, onBack: () -> Unit, onAsk: () -> Unit = 
 private fun MessageTodoCard() {
     val context = LocalContext.current
     var open by remember { mutableStateOf(false) }
-    var on by remember { mutableStateOf(MessageSettings.enabled(context)) }
-    var wechat by remember { mutableStateOf(MessageSettings.wechatOn(context)) }
-    var qq by remember { mutableStateOf(MessageSettings.qqOn(context)) }
+            var on by remember { mutableStateOf(MessageSettings.enabled(context)) }
+            var wechat by remember { mutableStateOf(MessageSettings.wechatOn(context)) }
+            var qq by remember { mutableStateOf(MessageSettings.qqOn(context)) }
+            var groups by remember { mutableStateOf(MessageSettings.groupsOn(context)) }
     var access by remember { mutableStateOf(MessageSettings.notificationAccess(context)) }
     var sent by remember { mutableStateOf(MessageSettings.sentCountThisMonth(context)) }
 
@@ -455,6 +456,20 @@ private fun MessageTodoCard() {
                     onCheckedChange = {
                         qq = it
                         MessageSettings.setQqOn(context, it)
+                    }
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("群聊（含通知群）", fontSize = 13.sp)
+                    Text("开了才读群消息；噪音大可随时关", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(
+                    checked = groups,
+                    enabled = on,
+                    onCheckedChange = {
+                        groups = it
+                        MessageSettings.setGroupsOn(context, it)
                     }
                 )
             }

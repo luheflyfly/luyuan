@@ -28,6 +28,15 @@ import java.util.Locale
 class TodayWidgetProvider : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
+        // 一次性清理：旧版把 widget 日志写进了同步根目录（引发刷新风暴），搬缓存后清掉遗留，
+        // 免得 Syncthing 继续来回同步这两个文件。删的只是本 App 自己生成的调试日志，安全可逆（重装即重现）。
+        try {
+            for (n in listOf("widget_log.txt", "widget_err.txt")) {
+                val legacy = java.io.File(StorageLocator.getRoot(context), n)
+                if (legacy.exists()) legacy.delete()
+            }
+        } catch (_: Throwable) {
+        }
         logWidget(context, "onUpdate ids=${ids.size} (首次加桌/系统周期刷新都会走这里)")
         for (id in ids) {
             // 先推极简卡：vivo/OriginOS 加桌瞬间只画系统占位圈，首帧不到就一直停在圈上
@@ -94,12 +103,14 @@ class TodayWidgetProvider : AppWidgetProvider() {
     }
 
     /**
-     * 心跳/诊断日志（写共享目录 widget_log.txt，随 Syncthing 回传电脑）。
-     * 用途：判断「加桌只显圆圈」到底是 onUpdate 没被调用，还是渲染崩了——之前完全没有证据。
+     * 心跳/诊断日志。🔴 09-14 晨修「非常卡」：日志写应用缓存目录，**绝不写同步目录**——
+     * 旧版写同步根目录的 widget_log.txt，被本 App 的文件监听当成笔记变更 → 触发全量刷新 →
+     * 组件又写日志 → 永动刷新风暴（外加 Syncthing 来回同步 100KB 文件），整机卡顿的根因。
+     * 诊断价值不变：adb / 文件管理器仍可从 cacheDir 取（路河真机不看这个，crash 走 CrashLogger）。
      */
     private fun logWidget(context: Context, msg: String) {
         try {
-            val f = java.io.File(StorageLocator.getRoot(context), "widget_log.txt")
+            val f = java.io.File(context.cacheDir, "widget_log.txt")
             val ts = java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.CHINA)
                 .format(java.util.Date())
             val prev = if (f.exists() && f.length() < 100_000) f.readText() else ""
@@ -108,10 +119,10 @@ class TodayWidgetProvider : AppWidgetProvider() {
         }
     }
 
-    /** 异常栈落盘到共享目录（不依赖 UncaughtExceptionHandler） */
+    /** 异常栈落盘到应用缓存目录（同 logWidget：不进同步目录） */
     private fun logWidgetError(context: Context, e: Throwable) {
         try {
-            val f = java.io.File(StorageLocator.getRoot(context), "widget_err.txt")
+            val f = java.io.File(context.cacheDir, "widget_err.txt")
             val sw = java.io.StringWriter()
             e.printStackTrace(java.io.PrintWriter(sw))
             val prev = if (f.exists() && f.length() < 100_000) f.readText() else ""

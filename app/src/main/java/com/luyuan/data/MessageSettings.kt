@@ -38,6 +38,13 @@ object MessageSettings {
         p(ctx).edit().putBoolean("src_qq", on).apply()
     }
 
+    /** 含群聊（通知群场景，09-14 路河反馈「相当多的群都是专门的通知群」）：默认关；开了才处理群消息 */
+    fun groupsOn(ctx: Context): Boolean = p(ctx).getBoolean("src_groups", false)
+
+    fun setGroupsOn(ctx: Context, on: Boolean) {
+        p(ctx).edit().putBoolean("src_groups", on).apply()
+    }
+
     /** 该包名当前是否放行（总开关 + 对应来源开关都开） */
     fun allowedPackage(ctx: Context, pkg: String): Boolean {
         if (!enabled(ctx)) return false

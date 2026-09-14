@@ -306,12 +306,17 @@ fun AppRoot(startDest: String) {
             NavHost(
                 navController = nav,
                 startDestination = "home",
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        translationX = drawerShift.toPx()
-                        alpha = drawerDim
-                    }
+                // 只在抽屉开着时才挂 graphicsLayer（alpha/平移）：避免空闲态给整页内容套离屏层拖累翻页帧率
+                modifier = if (showAsk || showSettings) {
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            translationX = drawerShift.toPx()
+                            alpha = drawerDim
+                        }
+                } else {
+                    Modifier.fillMaxSize()
+                }
             ) {
                 composable("home") {
                     // 09-10 治卡顿：beyondBoundsPageCount 4 -> 1。
@@ -411,6 +416,60 @@ fun AppRoot(startDest: String) {
                         }
                 )
             }
+            // 09-14 晨：胶囊展开态 = 独立输入窗口（打字可见性第三修，窗口级键盘避让见 TerminalInputDialog）
+            if (expanded && currentRoute == "home" && !multiSelect) {
+                com.luyuan.ui.TerminalInputDialog(
+                    searchMode = searchMode,
+                    searchQuery = searchQuery,
+                    onSearchQueryChange = { vm.setSearchQuery(it) },
+                    onToggleSearch = {
+                        searchMode = !searchMode
+                        if (!searchMode) vm.setSearchQuery("")
+                    },
+                    inputText = inputText,
+                    onInputTextChange = {
+                        inputText = it
+                        draftPrefs.edit().putString("terminal_draft", it).apply()
+                    },
+                    onCommit = {
+                        val t = inputText.trim()
+                        if (t.isNotBlank()) {
+                            vm.addManual(t)
+                            inputText = ""
+                            draftPrefs.edit().remove("terminal_draft").apply()
+                            expanded = false
+                            searchMode = false
+                            focusManager.clearFocus()
+                        }
+                    },
+                    onSaveDiary = {
+                        val t = inputText.trim()
+                        if (t.isNotBlank()) {
+                            vm.saveDiary(t)
+                            inputText = ""
+                            draftPrefs.edit().remove("terminal_draft").apply()
+                            expanded = false
+                            focusManager.clearFocus()
+                            scope.launch { pagerState.animateScrollToPage(3) }
+                        }
+                    },
+                    onPickImage = {
+                        pickImage.launch(
+                            androidx.activity.result.PickVisualMediaRequest(
+                                androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly
+                            )
+                        )
+                    },
+                    onRecord = {
+                        vm.startWavRecording()
+                        nav.navigate("record") { launchSingleTop = true }
+                    },
+                    onDismiss = {
+                        expanded = false
+                        focusManager.clearFocus()
+                    }
+                )
+            }
             // Q12：存进今天日记后的可点回执（胶囊上方，不挡输入）
             if (showDiaryEcho && currentRoute == "home" && !multiSelect) {
                 Box(
@@ -434,10 +493,12 @@ fun AppRoot(startDest: String) {
                     )
                 }
             }
-            // 悬浮终端胶囊 v3（Q13 拍板：收起态仅语音钮，点开向下展开；多选时收起）
+            // 悬浮终端胶囊 v3（收起态仅语音钮，点开弹独立输入窗口；多选时收起）
+            // 09-14 晨第三修「打字看不见」：展开态的输入搬到 TerminalInputDialog（独立窗口），
+            // 胶囊本体恒收起——主窗口的 IME insets 在路河 vivo/鸿蒙 4 上拿不到，Dialog 窗口级避让全 ROM 可靠。
             if (currentRoute == "home" && !multiSelect) {
                 TerminalCapsule(
-                    expanded = expanded,
+                    expanded = false,
                     onToggleExpanded = { expanded = !expanded },
                     searchMode = searchMode,
                     searchQuery = searchQuery,

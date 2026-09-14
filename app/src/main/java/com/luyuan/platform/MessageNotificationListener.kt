@@ -43,8 +43,10 @@ class MessageNotificationListener : NotificationListenerService() {
             // 太长的多半是公众号/长文通知，不是聊天消息
             if (body.length > 300) return
 
-            // 只处理私聊：群消息的 body 一般是「昵称: 内容」或「昵称：内容」，标题是群名
-            if (RX_GROUP_PREFIX.containsMatchIn(body)) return
+            // 群消息 body 一般是「昵称: 内容」/「昵称：内容」，标题是群名：
+            // 默认跳过；设置里开了「含群聊（通知群）」才处理（09-14 路河：通知群的待办占大头）
+            val isGroup = RX_GROUP_PREFIX.containsMatchIn(body)
+            if (isGroup && !MessageSettings.groupsOn(this)) return
 
             // 粗筛：命中待办信号词才进入下一步（本机完成，不过网）
             if (!hitSignal(body)) return
