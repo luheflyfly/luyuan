@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -290,7 +291,8 @@ fun NoteListScreen(
     onDetail: (String) -> Unit,
     onSettings: () -> Unit,
     onTrash: () -> Unit,
-    onReview: () -> Unit = {}
+    onReview: () -> Unit = {},
+    onTodos: () -> Unit = {}
 ) {
     val notes by vm.notes.collectAsStateWithLifecycle()
     val moodEnabled by vm.moodEnabled.collectAsStateWithLifecycle()
@@ -429,6 +431,9 @@ fun NoteListScreen(
                             tint = if (moodEnabled) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+                    IconButton(onClick = onTodos) {
+                        Icon(Icons.Default.TaskAlt, contentDescription = "待办")
                     }
                     IconButton(onClick = onReview) {
                         Icon(Icons.Default.BarChart, contentDescription = "本周回顾")

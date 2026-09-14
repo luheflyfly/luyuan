@@ -337,7 +337,8 @@ fun AppRoot(startDest: String) {
                                 onDetail = { id -> nav.navigate("detail/$id") },
                                 onSettings = { showSettings = true }, // 顶栏⚙ → 左侧抽屉第二层（left-ia）
                                 onTrash = { nav.navigate("trash") },
-                                onReview = { nav.navigate("review") } // 顶栏📊 → 本周回顾（只读）
+                                onReview = { nav.navigate("review") }, // 顶栏📊 → 本周回顾（只读）
+                                onTodos = { nav.navigate("todos") } // 顶栏📋 → 独立待办页（按截止排序）
                             )
                             1 -> LedgerScreen(
                                 vm = vm,
@@ -391,6 +392,9 @@ fun AppRoot(startDest: String) {
                 }
                 composable("review") {
                     com.luyuan.ui.ReviewScreen(vm = vm, onBack = { nav.popBackStack() })
+                }
+                composable("todos") {
+                    com.luyuan.ui.TodoScreen(vm = vm, onBack = { nav.popBackStack() })
                 }
             }
             // 点击空白处收起展开态 + 收键盘（路河 09-10 反馈：别只靠输入法收起）
