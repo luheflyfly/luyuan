@@ -248,7 +248,8 @@ fun SettingsScreen(vm: LuyuanViewModel, onBack: () -> Unit, onAsk: () -> Unit = 
                     android.provider.Settings.canDrawOverlays(context)
                 }
                 Text(
-                    "同时按「音量加 + 音量减」= 直接开始录音（录完回电脑转文字，不用本地模型）。",
+                    "同时按「音量加 + 音量减」= 直接开始录音（录完回电脑转文字，不用本地模型）。\n" +
+                        "长按悬浮胶囊的语音圆钮 = 唤起输入法语音（讯飞长按空格代按；需无障碍已开且键盘正在输入，失败自动改录音。2026-09-14 夜新增）。",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
