@@ -374,8 +374,8 @@ private fun MessageTodoCard() {
         )
         if (open) {
             Text(
-                "开启后，命中待办关键词的消息，其原文会发送到 DeepSeek 云端解析成待办；" +
-                    "其余消息不出本机。抽出来的待办先落「待确认」，你在笔记页点 ✓ 才真入账。",
+                "开启后，除「收到/好的」这类确认词外，绝大多数消息（含群通知）会送 DeepSeek 云端判有没有事要办；" +
+                    "本机只做最简单的噪声过滤。判出来的先落「待确认」，你在待办页点 ✓ 才真入账。",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

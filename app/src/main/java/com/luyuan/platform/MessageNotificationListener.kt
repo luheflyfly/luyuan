@@ -48,8 +48,9 @@ class MessageNotificationListener : NotificationListenerService() {
             val isGroup = RX_GROUP_PREFIX.containsMatchIn(body)
             if (isGroup && !MessageSettings.groupsOn(this)) return
 
-            // 粗筛：命中待办信号词才进入下一步（本机完成，不过网）
-            if (!hitSignal(body)) return
+            // 09-14 路河拍板 B：取消信号词白名单——群里大量「收到/好的」在本机扔掉，
+            // 其余（含转告/通知同学这类没有固定词表的）全部送云端定夺有没有事要办
+            if (isAckOrNoise(body)) return
 
             // 60 秒内同发送者 + 同内容只处理一次（厂商会连发同内容通知）
             if (isDuplicate(title, body)) return
@@ -105,19 +106,21 @@ class MessageNotificationListener : NotificationListenerService() {
     }
 
     companion object {
-        /** 待办信号词（粗筛，本机不过网）——命中任一才可能送到云端 */
-        val SIGNAL_WORDS = listOf(
-            "记得", "明天", "后天", "帮我", "麻烦", "要交", "提醒", "别忘了",
-            "几点", "去取", "去拿", "之前", "deadline", "截止", "开会", "晚会",
-            "别忘", "搞定", "回复我", "联系我", "交材料", "报名", "交作业"
+        /** 确认词黑名单（trim 后全等才丢；「周五交材料」这类短而重要的不受影响） */
+        private val ACK_WORDS = hashSetOf(
+            "收到", "好的", "好", "嗯", "嗯嗯", "ok", "OK", "Ok", "行", "可以",
+            "谢谢", "明白了", "了解", "已读", "1", "666", "哈哈哈", "哈哈哈哈", "哈哈哈哈哈"
         )
 
-        /** 「周X」/「星期X」也算信号（X 用正则，避免漏「周三」这类） */
-        private val RX_WEEKDAY = Regex("周[一二三四五六日天]|星期[一二三四五六日天]|礼拜[一二三四五六日天]")
-
-        /** 粗筛总判定 */
-        private fun hitSignal(body: String): Boolean =
-            SIGNAL_WORDS.any { body.contains(it) } || RX_WEEKDAY.containsMatchIn(body)
+        /** 确认词 / 纯噪声判定：本机完成不过网 */
+        private fun isAckOrNoise(body: String): Boolean {
+            val b = body.trim()
+            if (b.isEmpty()) return true
+            if (b in ACK_WORDS) return true
+            // 整条没有一个文字（纯数字/标点/表情）→ 噪声
+            if (b.all { !it.isLetter() }) return true
+            return false
+        }
 
         /** 群聊特征：body 形如「昵称: 内容」/「昵称：内容」（昵称不含空格与标点过长） */
         private val RX_GROUP_PREFIX = Regex("^\\s*[^\\s：:]{1,20}\\s*[：:]\\s*\\S")
