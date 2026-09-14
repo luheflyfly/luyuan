@@ -280,14 +280,13 @@ fun SettingsScreen(vm: LuyuanViewModel, onBack: () -> Unit, onAsk: () -> Unit = 
                 }
             }
 
-            // ---------- 📚 语音模型离线导入 ----------
-            SectionCard("📚 语音模型离线导入") {
+            // ---------- 📚 语音 ----------
+            SectionCard("📚 语音说明") {
                 Text(
-                    "在线下载慢？推荐免数据线的方式：\n" +
-                        "① 电脑把 vosk-model-small-cn-0.22.zip 放进共享文件夹的 model\\ 子目录（D:\\Luyuan\\data\\notes\\model\\）；\n" +
-                        "② 等 Syncthing 同步到手机（AA 路远/model/）；\n" +
-                        "③ 重启路远自动识别（zip 或解压后的文件夹都认）。\n" +
-                        "备选：数据线把 zip 拷到手机「Download」文件夹也可以。",
+                    "两种说法：\n" +
+                        "① 录音待转写（默认推荐）：手机只存原声，回家由电脑大模型转写，最准；\n" +
+                        "② 本机离线识别：没网时的兜底，识别模型已内置在安装包里，无需手动导入。\n" +
+                        "长按悬浮胶囊语音钮还能唤起输入法语音（讯飞），见「⌨️ 实体键快捷」。",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
