@@ -212,6 +212,15 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
                                         .border(1.dp, LuyuanColors.Ink4, CircleShape)
                                         .clickable { discard(p) }
                                 ) { Icon(Icons.Default.Close, "不要", tint = LuyuanColors.Ink3, modifier = Modifier.size(14.dp)) }
+                                Spacer(Modifier.width(8.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(999.dp))
+                                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(999.dp))
+                                        .clickable { openWechat(context) }
+                                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                                ) { Text("💬 微信", fontSize = 11.sp, color = LuyuanColors.Ink2) }
                             }
                         }
                     }
@@ -268,6 +277,17 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
                 }
             }
         }
+    }
+}
+
+// ---------- 打开微信（待确认/待办卡快捷入口；「回溯真源」= 日后深链到具体会话，本批只拉起） ----------
+
+internal fun openWechat(ctx: android.content.Context) {
+    try {
+        val i = ctx.packageManager.getLaunchIntentForPackage("com.tencent.mm")
+        if (i != null) ctx.startActivity(i)
+        else android.widget.Toast.makeText(ctx, "没找到微信", android.widget.Toast.LENGTH_SHORT).show()
+    } catch (_: Throwable) {
     }
 }
 

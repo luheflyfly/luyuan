@@ -816,6 +816,7 @@ private fun PendingTodoSection(
     onConfirm: (com.luyuan.data.PendingMessageTodo) -> Unit,
     onDiscard: (com.luyuan.data.PendingMessageTodo) -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     Column(
         modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -924,6 +925,18 @@ private fun PendingTodoCard(
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp)
                 ) {
                     Text("✗ 不要", fontSize = 12.sp)
+                }
+                TextButton(
+                    onClick = {
+                        try {
+                            val i = context.packageManager.getLaunchIntentForPackage("com.tencent.mm")
+                            if (i != null) context.startActivity(i)
+                        } catch (_: Exception) {
+                        }
+                    },
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp)
+                ) {
+                    Text("💬 微信", fontSize = 12.sp)
                 }
             }
         }
