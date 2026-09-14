@@ -848,6 +848,7 @@ private fun PendingTodoCard(
     onConfirm: (com.luyuan.data.PendingMessageTodo) -> Unit,
     onDiscard: (com.luyuan.data.PendingMessageTodo) -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val srcName = if (p.source == "wechat") "微信" else "QQ"
     val time = runCatching {
         OffsetDateTime.parse(p.created_at).toLocalDateTime()
