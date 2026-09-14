@@ -91,7 +91,7 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
     }
     fun toggleMsg(t: Todo) {
         try {
-            val now = TodoStore.nowIso()
+            val now = PendingMessageTodoStore.nowIso()
             TodoStore.write(context, t.copy(done = !t.done, done_at = if (!t.done) now else null))
         } catch (_: Exception) {
         }
@@ -300,7 +300,7 @@ internal fun deadlineScore(whenText: String, remindAt: String?, createdAt: Strin
         if (day != null) return at(day, time ?: LocalTime.of(23, 59))
         // 3) 周X/星期X/礼拜X → 下一个该星期几（含今天；与 PC 相对星期口径同向）
         RX_WEEK.find(t)?.groupValues?.get(1)?.let { ch ->
-            WEEK_MAP[ch]?.let { target ->
+            WEEK_MAP[ch.firstOrNull()]?.let { target ->
                 var d = now.toLocalDate()
                 var guard = 0
                 while (d.dayOfWeek.value != target && guard < 8) {
