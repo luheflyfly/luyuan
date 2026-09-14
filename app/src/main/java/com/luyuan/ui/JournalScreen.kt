@@ -21,12 +21,18 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddAPhoto
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Mood
+import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -224,13 +230,20 @@ fun JournalScreen(vm: LuyuanViewModel, onRecord: () -> Unit) {
                             Text(" · 今天", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Spacer(Modifier.weight(1f))
                             Text(
-                                if (streak > 0) "🔥 连续 $streak 天" else "从今天开始",
+                                if (streak > 0) "连续 $streak 天" else "从今天开始",
                                 fontSize = 12.sp, fontWeight = FontWeight.Bold, color = LuyuanColors.Amber
                             )
+                                Spacer(Modifier.width(3.dp))
+                                Icon(
+                                    Icons.Default.Whatshot,
+                                    contentDescription = null,
+                                    tint = LuyuanColors.Amber,
+                                    modifier = Modifier.size(14.dp)
+                                )
                         }
                         if (savedAt.isNotBlank()) {
                             Text(
-                                "✓ 已自动保存 · $savedAt",
+                                "已自动保存 · $savedAt",
                                 fontSize = 9.sp, color = LuyuanColors.Ink4,
                                 modifier = Modifier.align(Alignment.TopEnd)
                             )
@@ -240,19 +253,19 @@ fun JournalScreen(vm: LuyuanViewModel, onRecord: () -> Unit) {
                         value = diaryValue,
                         onValueChange = { diaryValue = it; dirty = true },
                         textStyle = androidx.compose.ui.text.TextStyle(
-                            fontSize = 14.5.sp, lineHeight = 26.sp, color = LuyuanColors.Ink1
+                            fontSize = 16.sp, lineHeight = 28.sp, color = LuyuanColors.Ink1
                         ),
                         cursorBrush = SolidColor(LuyuanColors.Green700),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(118.dp)
+                            .height(140.dp)
                             .padding(top = 9.dp),
                         decorationBox = { inner ->
                             Box {
                                 if (diaryValue.text.isEmpty()) {
                                     Text(
                                         "今天想记录点什么？支持换行",
-                                        fontSize = 14.5.sp, color = LuyuanColors.Ink4
+                                        fontSize = 16.sp, color = LuyuanColors.Ink4
                                     )
                                 }
                                 inner()
@@ -271,15 +284,30 @@ fun JournalScreen(vm: LuyuanViewModel, onRecord: () -> Unit) {
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
                     ) {
-                        DeskTool("😊 心情") { emojiTab = 0; showEmoji = true }
-                        DeskTool("🧸 贴纸") { showStickerStrip = !showStickerStrip }
-                        DeskTool("🖼 配图") { pickImage.launch("image/*") }
-                        DeskTool("🎤 说", tint = LuyuanColors.Blue) {
-                            vm.startWavRecording(diary = true)
-                            onRecord()
-                        }
+                        DeskTool(Icons.Default.Mood, "心情") { emojiTab = 0; showEmoji = true }
+                        DeskTool(Icons.Default.AutoAwesome, "贴纸") { showStickerStrip = !showStickerStrip }
+                        DeskTool(Icons.Default.AddAPhoto, "配图") { pickImage.launch("image/*") }
                         Spacer(Modifier.weight(1f))
-                        Text(todayMood, fontSize = 20.sp)
+                        Text(todayMood, fontSize = 22.sp)
+                        Spacer(Modifier.width(10.dp))
+                        // 录音集成进书写卡（V2 速记条同款 40dp 深绿圆钮）
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(LuyuanColors.Green700, CircleShape)
+                                .clickable {
+                                    vm.startWavRecording(diary = true)
+                                    onRecord()
+                                }
+                        ) {
+                            Icon(
+                                Icons.Default.Mic,
+                                contentDescription = "说一段",
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
                     // 贴纸快捷条（🧸 展开；「全部」进完整表情面板）
                     if (showStickerStrip) {
@@ -357,41 +385,50 @@ fun JournalScreen(vm: LuyuanViewModel, onRecord: () -> Unit) {
                     color = LuyuanColors.Ink4,
                     modifier = Modifier.padding(bottom = 6.dp)
                 )
-                // 书桌稿横行：左日期块 + 单行文字 + 右心情（点击开查看弹窗）
-                for (d in pastDiaries.take(30)) {
-                    val day = journalParseDay(d.created_at)
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(14.dp))
-                            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
-                            .clickable { viewingDiary = d }
-                            .padding(horizontal = 13.dp, vertical = 11.dp)
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(40.dp)) {
-                            Text(
-                                day?.dayOfMonth?.toString() ?: d.created_at.take(10),
-                                fontSize = 16.sp, fontWeight = FontWeight.Bold, color = LuyuanColors.Ink1
-                            )
-                            Text(
-                                day?.let { journalDow(it) } ?: "",
-                                fontSize = 9.sp, color = LuyuanColors.Ink4
-                            )
+                // 2:3 两列小卡墙（路河 09-09 定的样式，09-14 拍板保留此式不换书桌横行）
+                for (row in pastDiaries.take(30).chunked(2)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        for (d in row) {
+                            val day = journalParseDay(d.created_at)
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .aspectRatio(2f / 3f)
+                                    .clickable { viewingDiary = d }
+                            ) {
+                                Column(modifier = Modifier.fillMaxSize().padding(10.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            day?.let { journalDayLabel(it) } ?: d.created_at.take(10),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        if (d.images.isNotEmpty()) {
+                                            Text(
+                                                "🖼${d.images.size}",
+                                                fontSize = 11.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        d.text.replace("\n", " ").take(90) + if (d.text.length > 90) "…" else "",
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 7,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
                         }
-                        Spacer(Modifier.width(12.dp))
-                        Text(
-                            d.text.replace("\n", " "),
-                            fontSize = 12.5.sp, color = LuyuanColors.Ink2,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
-                        firstEmoji(d.text)?.let {
-                            Spacer(Modifier.width(8.dp))
-                            Text(it, fontSize = 16.sp)
-                        }
+                        if (row.size == 1) Spacer(Modifier.weight(1f))
                     }
-                    Spacer(Modifier.height(8.dp))
                 }
             }
             Card(
@@ -620,17 +657,24 @@ fun JournalScreen(vm: LuyuanViewModel, onRecord: () -> Unit) {
     }
 }
 
-/** 书桌工具胶囊（稿 .desk .tool）：白底圆角小药丸，绿字图标语义 */
+/** 书桌工具胶囊（稿 .desk .tool）：1.6px 语义图标 + 文字，全库禁 emoji 原则 */
 @Composable
-private fun DeskTool(label: String, tint: Color = LuyuanColors.Green700, onClick: () -> Unit) {
+private fun DeskTool(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .background(MaterialTheme.colorScheme.background, RoundedCornerShape(999.dp))
             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(999.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 11.dp, vertical = 5.dp)
+            .padding(horizontal = 10.dp, vertical = 5.dp)
     ) {
-        Text(label, fontSize = 11.sp, color = tint)
+        Icon(
+            icon,
+            contentDescription = label,
+            tint = LuyuanColors.Green700,
+            modifier = Modifier.size(14.dp)
+        )
+        Spacer(Modifier.width(4.dp))
+        Text(label, fontSize = 11.sp, color = LuyuanColors.Ink2)
     }
 }
