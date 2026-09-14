@@ -324,9 +324,9 @@ fun AppRoot(startDest: String) {
                     // （路河反馈「点切页太卡」「滑动很用力才能切页」）。故只保留相邻页。
                     HorizontalPager(
                         state = pagerState,
-                        // 09-14：1→2（路河反馈翻页中途卡一下=翻过页界时下一页现场组装；
-                        // 常驻 3 页的代价已比 09-10 的 5 页轻很多，若还卡随时回 1）
-                        beyondBoundsPageCount = 2,
+                        // 09-14 复盘定版：4（全常驻）=翻页顺但整机卡；2=中间页时五页全活（老病复发、
+                        // 出现「直接切不动」）；1=绝不切不动、连翻两页才顿一下——取 1。
+                        beyondBoundsPageCount = 1,
                         modifier = Modifier.fillMaxSize()
                     ) { page ->
                         when (page) {
