@@ -722,15 +722,19 @@ fun NoteCard(
                     modifier = Modifier.padding(top = 3.dp)
                 )
             }
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(top = 7.dp)
-            ) {
-                Badge(
-                    if (note.source == "voice") "语音" else "手动",
-                    if (note.source == "voice") LuyuanColors.Blue else LuyuanColors.Green500
-                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 7.dp)
+                ) {
+                    // PC msgdigest 批（09-15 夜对齐）：通知总结笔记专属徽章（琥珀=通知·待办族）
+                    if (note.source == "msgdigest" || note.tags.any { it == "通知总结" }) {
+                        Badge("通知总结", LuyuanColors.Amber)
+                    }
+                    Badge(
+                        if (note.source == "voice") "语音" else "手动",
+                        if (note.source == "voice") LuyuanColors.Blue else LuyuanColors.Green500
+                    )
                 if (note.device == "phone") Badge("手机", LuyuanColors.Ink3)
                 if (note.transcribed == false) Badge("待转写", LuyuanColors.Amber)
                 if (note.audio != null && note.transcribed == true) Badge("原声", LuyuanColors.Green500)

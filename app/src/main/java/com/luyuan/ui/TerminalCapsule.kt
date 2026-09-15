@@ -155,25 +155,17 @@ fun TerminalCapsule(
                     // 搜索态：退出搜索
                     ExpandedAction("退出搜索", Icons.Default.Close, onToggleSearch)
                 } else {
-                    // 09-15 夜 IA 重排：问路远入口迁进胶囊（笔记页顶栏瘦身），与 日记/搜索/图片 同排
+                    // 09-15 夜 IA 重排：问路远入口迁进胶囊（笔记页顶栏瘦身），与 日记/搜索/图片 同排。
+                    // 注：原行尾「✕ 收起」已删——点胶囊外空白即收起（MainActivity 外层手势层），少一步且防窄屏挤出。
                     ExpandedAction("问路远", Icons.Default.SmartToy, onAsk)
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(Modifier.width(4.dp))
                     ExpandedAction("日记", Icons.Default.EditNote, onSaveDiary)
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(Modifier.width(4.dp))
                     ExpandedAction("搜索", Icons.Default.Search, onToggleSearch)
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(Modifier.width(4.dp))
                     ExpandedAction("图片", Icons.Default.Image, onPickImage)
                 }
                 Spacer(Modifier.weight(1f))
-                // ✕ 收起（点空白处也收起，由 MainActivity 外层处理）
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(34.dp)
-                        .background(LuyuanColors.Green100, CircleShape)
-                        .clickable { onToggleExpanded() }
-                ) { Icon(Icons.Default.Close, contentDescription = "收起", tint = LuyuanColors.Ink2, modifier = Modifier.size(17.dp)) }
-                Spacer(Modifier.width(8.dp))
                 VoiceButton(onRecord)
             }
         } else {
@@ -212,7 +204,7 @@ private fun ExpandedAction(label: String, icon: ImageVector, onClick: () -> Unit
         modifier = Modifier
             .background(LuyuanColors.Green50, RoundedCornerShape(999.dp))
             .clickable { onClick() }
-            .padding(horizontal = 12.dp, vertical = 7.dp)
+            .padding(horizontal = 10.dp, vertical = 7.dp)
     ) {
         Icon(icon, contentDescription = null, tint = LuyuanColors.Green700, modifier = Modifier.size(15.dp))
         Spacer(Modifier.width(5.dp))

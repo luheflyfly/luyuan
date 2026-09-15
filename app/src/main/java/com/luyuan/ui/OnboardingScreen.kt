@@ -233,7 +233,7 @@ fun OnboardingScreen(vm: LuyuanViewModel, onDone: () -> Unit) {
                     Spacer(Modifier.height(18.dp))
                     Trick(Icons.Default.EditNote, "记一笔", "主页下方胶囊点开，打字回车就是一条笔记")
                     Trick(Icons.Default.Mic, "说一句", "胶囊的话筒按住说话；或音量加+减一起按，随时随地录音")
-                    Trick(Icons.Default.SmartToy, "问路远", "笔记页右上角点机器人图标问它任何事；齿轮是设置；左缘右滑是快捷手势")
+                    Trick(Icons.Default.SmartToy, "问路远", "点下方胶囊展开，再点「问路远」问它任何事；待办和设置都在底栏（待办带红点，设置是最右齿轮）")
                     Spacer(Modifier.height(16.dp))
                     Text(
                         "装好后长按桌面，还能把「今日卡」拖出去。",
