@@ -257,7 +257,8 @@ class TodayWidgetProvider : AppWidgetProvider() {
         views.setOnClickPendingIntent(R.id.widget_course_name, pagePi(context, "course", 4101))
         views.setOnClickPendingIntent(R.id.widget_course_place, pagePi(context, "course", 4101))
         views.setOnClickPendingIntent(R.id.widget_stats, pagePi(context, "notes", 4102))
-        views.setOnClickPendingIntent(R.id.widget_todo_val, pagePi(context, "notes", 4102))
+        // vc82：待办数值直达待办页（slot5，tab:todos 深链 vc79 已备），不再落笔记页
+        views.setOnClickPendingIntent(R.id.widget_todo_val, pagePi(context, "todos", 4102))
         views.setOnClickPendingIntent(R.id.widget_expense_val, pagePi(context, "ledger", 4103))
         views.setOnClickPendingIntent(R.id.widget_date, pagePi(context, "journal", 4104))
         views.setOnClickPendingIntent(R.id.widget_recent_tx_0, pagePi(context, "notes", 4110))
