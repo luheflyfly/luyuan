@@ -110,7 +110,7 @@ fun AskScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
         if ((q.isBlank() && pending.isEmpty()) || busy) return
         val imgs = pending.map { it.dataUrl }
         if (imgs.isNotEmpty() && !model.vision) {
-            error = "当前模型（${model.label}）不支持图片，点顶部切换到 👁 视觉模型"
+            error = "当前模型（${model.label}）不支持图片，点顶部切换到视觉模型"
             return
         }
         val history = messages.toList()
@@ -183,7 +183,7 @@ fun AskScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
                         .padding(horizontal = 14.dp, vertical = 8.dp)
                 ) {
                     Text(
-                        "${model.emoji} ${model.label}",
+                        "${model.label}",
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
                         modifier = Modifier.weight(1f)
@@ -201,7 +201,7 @@ fun AskScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
                 Text(
                     "问点什么，我会参考你本机最近的笔记和待办（私密标签的笔记默认不发出去，\n" +
                         "需要时可在输入框上方勾选『包含私密内容』）。\n" +
-                        "要发图片请先切到 👁 视觉模型。API Key 在「设置 → 问路远」里填。",
+                        "要发图片请先切到视觉模型。API Key 在「设置 → 问路远」里填。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(20.dp)
@@ -262,7 +262,7 @@ fun AskScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
             }
             error?.let {
                 Text(
-                    "⚠️ $it",
+                    "$it",
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
@@ -408,7 +408,7 @@ fun AskScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
                                 .padding(vertical = 8.dp)
                         ) {
                             Text(
-                                (if (selected) "● " else "○ ") + m.emoji + " " + m.label,
+                                (if (selected) "● " else "○ ") + m.label,
                                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                                 fontSize = 15.sp,
                                 modifier = Modifier.weight(1f)
@@ -424,7 +424,7 @@ fun AskScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
                         }
                     }
                     Text(
-                        "深思模式回答慢但更聪明；图片只支持 👁 视觉模型（实验）。",
+                        "深思模式回答慢但更聪明；图片只支持视觉模型（实验）。",
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 6.dp)

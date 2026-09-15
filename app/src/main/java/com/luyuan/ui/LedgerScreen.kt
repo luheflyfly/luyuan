@@ -62,6 +62,17 @@ import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.CleaningServices
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DirectionsBus
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 
 /**
  * 记账页（手机 UI 方案 A · B1 只读）：月份 chips + 深绿统计卡 + 分类占比 + 按天流水。
@@ -140,12 +151,9 @@ fun LedgerScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit) {
                     }
                 },
                 actions = {
-                    Text("🤖", fontSize = 18.sp, modifier = Modifier
-                        .clickable { onAsk() }
-                        .padding(horizontal = 10.dp))
-                    Text("🗑", fontSize = 17.sp, modifier = Modifier
-                        .clickable { onTrash() }
-                        .padding(horizontal = 10.dp))
+                    // 09-15 路河：拒 emoji 图标 → Material（问路远=机器人 / 回收站=垃圾桶）
+                    IconButton(onClick = onAsk) { Icon(Icons.Default.SmartToy, contentDescription = "问路远") }
+                    IconButton(onClick = onTrash) { Icon(Icons.Default.Delete, contentDescription = "回收站") }
                 }
             )
         }
@@ -341,7 +349,7 @@ private fun ExpenseRow(e: Expense) {
                     .size(36.dp)
                     .background(LuyuanColors.categoryBg(cat), RoundedCornerShape(10.dp))
             ) {
-                Text(catEmoji(cat), fontSize = 17.sp)
+                Icon(catIcon(cat), contentDescription = null, modifier = Modifier.size(18.dp))
             }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
@@ -525,11 +533,12 @@ internal fun fmtMoney(v: Double): String {
     }
 }
 
-private fun catEmoji(c: String) = when (c) {
-    "餐饮" -> "🍜"
-    "学习" -> "📚"
-    "日用" -> "🧺"
-    "娱乐" -> "🎮"
-    "交通" -> "🚌"
-    else -> "📦"
+/** 分类图标（09-15 路河：拒 emoji，按 v2 语义图标口径换 Material Icons） */
+private fun catIcon(c: String): androidx.compose.ui.graphics.vector.ImageVector = when (c) {
+    "餐饮" -> Icons.Default.Restaurant
+    "学习" -> Icons.Default.MenuBook
+    "日用" -> Icons.Default.CleaningServices
+    "娱乐" -> Icons.Default.SportsEsports
+    "交通" -> Icons.Default.DirectionsBus
+    else -> Icons.Default.Category
 }

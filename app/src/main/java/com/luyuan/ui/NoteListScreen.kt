@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.Mood
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material3.AssistChip
@@ -293,7 +294,9 @@ fun NoteListScreen(
     onRecord: () -> Unit,
     onDetail: (String) -> Unit,
     onTrash: () -> Unit,
-    onTodos: () -> Unit = {}
+    onTodos: () -> Unit = {},
+    onAsk: () -> Unit = {},
+    onSettings: () -> Unit = {}
 ) {
     val notes by vm.notes.collectAsStateWithLifecycle()
     val moodEnabled by vm.moodEnabled.collectAsStateWithLifecycle()
@@ -422,6 +425,13 @@ fun NoteListScreen(
                     }
                     IconButton(onClick = onTrash) {
                         Icon(Icons.Default.DeleteOutline, contentDescription = "回收站")
+                    }
+                    // 09-15 路河：设置/问路远常驻入口（此前只靠左缘右滑带，时灵时不灵=「设置页面不在了」）
+                    IconButton(onClick = onAsk) {
+                        Icon(Icons.Default.SmartToy, contentDescription = "问路远")
+                    }
+                    IconButton(onClick = onSettings) {
+                        Icon(Icons.Default.Settings, contentDescription = "设置")
                     }
 
                 }
@@ -741,8 +751,8 @@ fun NoteCard(
                     if (note.source == "voice") Color(0xFF059669) else Color(0xFF1D4ED8)
                 )
                 if (note.device == "phone") Badge("手机", Color(0xFF6B7280))
-                if (note.transcribed == false) Badge("⏳ 待转写", Color(0xFFD97706))
-                if (note.audio != null && note.transcribed == true) Badge("🎙 原声", Color(0xFF059669))
+                if (note.transcribed == false) Badge("待转写", Color(0xFFD97706))
+                if (note.audio != null && note.transcribed == true) Badge("原声", Color(0xFF059669))
                 remindBadge(note)
                 for (t in note.tags.take(3)) Badge(t, Color(0xFF6B7280))
                 Spacer(Modifier.size(2.dp))
@@ -771,5 +781,5 @@ private fun remindBadge(note: Note) {
             ra // 兜底显示原文
         }
     }
-    Badge("⏰ $shown", Color(0xFFD97706))
+    Badge("$shown 提醒", Color(0xFFD97706))
 }

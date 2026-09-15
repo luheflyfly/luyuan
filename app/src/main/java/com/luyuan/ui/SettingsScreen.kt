@@ -20,6 +20,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.BottomNavigation
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -107,7 +114,7 @@ fun SettingsScreen(vm: LuyuanViewModel, onBack: () -> Unit, onAsk: () -> Unit = 
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // ---------- 📁 共享目录 ----------
-            SectionCard("📁 共享目录") {
+            SectionCard("共享目录", Icons.Default.Folder) {
                 Text(
                     "当前：$currentPath",
                     style = MaterialTheme.typography.labelSmall,
@@ -177,7 +184,7 @@ fun SettingsScreen(vm: LuyuanViewModel, onBack: () -> Unit, onAsk: () -> Unit = 
             }
 
             // ---------- 🔍 同步诊断 ----------
-            SectionCard("🔍 同步诊断") {
+            SectionCard("同步诊断", Icons.Default.Search) {
                 Text(
                     "主页笔记数量不对？点下面的按钮体检当前目录，把结果告诉路远即可定位。",
                     style = MaterialTheme.typography.labelSmall,
@@ -204,7 +211,7 @@ fun SettingsScreen(vm: LuyuanViewModel, onBack: () -> Unit, onAsk: () -> Unit = 
                     Text(
                         buildString {
                             appendLine("目录：${d.root}")
-                            appendLine("目录可读：${if (ok) "✅" else "⚠️ 读不了（权限/路径不存在）"}")
+                            appendLine("目录可读：${if (ok) "可" else "不可（权限/路径不存在）"}")
                             appendLine("笔记文件总数：${d.jsonTotal}（含隐藏备份）")
                             appendLine("其中真笔记：${d.notes} 条（主页应显示这么多）")
                             appendLine("日记：${d.diaries} 条（日记页显示，主页不显示）")
@@ -224,10 +231,10 @@ fun SettingsScreen(vm: LuyuanViewModel, onBack: () -> Unit, onAsk: () -> Unit = 
             }
 
             // ---------- 🔐 权限 ----------
-            SectionCard("🔐 权限") {
-                Text("麦克风：${if (audio) "✅ 已授权" else "⚠️ 未授权"}", style = MaterialTheme.typography.bodyMedium)
+            SectionCard("权限", Icons.Default.Lock) {
+                Text("麦克风：${if (audio) "已授权" else "未授权"}", style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    "所有文件访问：${if (allFiles) "✅ 已授权" else "⚠️ 未授权（需在设置中开启，才能读写 Syncthing 共享目录）"}",
+                    "所有文件访问：${if (allFiles) "已授权" else "未授权（需在设置中开启，才能读写 Syncthing 共享目录）"}",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 if (!allFiles) {
@@ -238,7 +245,7 @@ fun SettingsScreen(vm: LuyuanViewModel, onBack: () -> Unit, onAsk: () -> Unit = 
             }
 
             // ---------- ⌨️ 实体键快捷 ----------
-            SectionCard("⌨️ 实体键快捷（实验性）") {
+            SectionCard("实体键快捷（实验性）", Icons.Default.Keyboard) {
                 val volumeServiceOn = remember {
                     android.provider.Settings.Secure.getString(
                         context.contentResolver,
@@ -253,8 +260,8 @@ fun SettingsScreen(vm: LuyuanViewModel, onBack: () -> Unit, onAsk: () -> Unit = 
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
-                    "①无障碍「路远·组合键录音」（状态：${if (volumeServiceOn) "✅ 已开启" else "⚠️ 未开启"}）\n" +
-                        "②「显示在其他应用上层」（状态：${if (overlayOn) "✅ 已授权" else "⚠️ 未授权"}）",
+                    "①无障碍「路远·组合键录音」（状态：${if (volumeServiceOn) "已开启" else "未开启"}）\n" +
+                        "②「显示在其他应用上层」（状态：${if (overlayOn) "已授权" else "未授权"}）",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -281,7 +288,7 @@ fun SettingsScreen(vm: LuyuanViewModel, onBack: () -> Unit, onAsk: () -> Unit = 
             }
 
             // ---------- 📚 语音 ----------
-            SectionCard("📚 语音说明") {
+            SectionCard("语音说明", Icons.Default.MenuBook) {
                 Text(
                     "两种说法：\n" +
                         "① 录音待转写（默认推荐）：手机只存原声，回家由电脑大模型转写，最准；\n" +
@@ -292,7 +299,7 @@ fun SettingsScreen(vm: LuyuanViewModel, onBack: () -> Unit, onAsk: () -> Unit = 
             }
 
             // ---------- 🤖 问路远（A2） ----------
-            SectionCard("🤖 问路远（AI 问答）") {
+            SectionCard("问路远（AI 问答）", Icons.Default.SmartToy) {
                 Text(
                     "填一次 OpenAI 兼容接口（默认 DeepSeek），就能随时用对话问它，回答会参考你本机的笔记和待办。" +
                         "Key 只存本机 App 私有目录，不进同步目录；" +
@@ -323,7 +330,7 @@ fun SettingsScreen(vm: LuyuanViewModel, onBack: () -> Unit, onAsk: () -> Unit = 
             }
 
             // ---------- 🧭 底栏自定义（2026-09-15 路河拍板：子界面可自由放底栏） ----------
-            SectionCard("🧭 底栏自定义") {
+            SectionCard("底栏自定义", Icons.Default.BottomNavigation) {
                 Text(
                     "笔记、日记固定在底栏；下面三页可以自由收起，收起后仍能从待办页、左缘抽屉或深链进入。",
                     style = MaterialTheme.typography.labelSmall,
@@ -379,7 +386,7 @@ private fun MessageTodoCard() {
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(
-            if (open) "📬 消息待办（点收起）▴" else "📬 消息待办（手机消息自动变待办）▾",
+            if (open) "消息待办（点收起）▴" else "消息待办（手机消息自动变待办）▾",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.clickable { open = !open }
@@ -387,15 +394,15 @@ private fun MessageTodoCard() {
         if (open) {
             Text(
                 "开启后，除「收到/好的」这类确认词外，绝大多数消息（含群通知）会送 DeepSeek 云端判有没有事要办；" +
-                    "本机只做最简单的噪声过滤。判出来的先落「待确认」，你在待办页点 ✓ 才真入账。",
+                    "本机只做最简单的噪声过滤。判出来的先落「待确认」，你在待办页点「收下」才真入账。",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             // ① 通知使用权（前置条件）
             Text(
-                if (access) "①通知使用权：✅ 已开启"
-                else "①通知使用权：⚠️ 未开启（不开启读不到任何消息）",
+                if (access) "①通知使用权：已开启"
+                else "①通知使用权：未开启（不开启读不到任何消息）",
                 fontSize = 12.5.sp,
                 color = if (access) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error
             )
@@ -411,7 +418,7 @@ private fun MessageTodoCard() {
                 Text(
                     "鸿蒙 4 / 安卓路径：设置 → 通知和状态栏 → 通知管理（或更多通知设置）→ 通知使用权 → 找到「路远消息待办监听」→ 打开。\n" +
                         "找不到入口时：在设置顶部搜索框搜「通知使用权」直接跳。\n" +
-                        "开完回到本页，状态会变 ✅（下次进设置页刷新）。",
+                        "开完回到本页，状态会变为已开启（下次进设置页刷新）。",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -504,7 +511,11 @@ private fun MessageTodoCard() {
 
 /** 分区白卡：方案 A 卡片语言（纸白底/圆角16/淡描边） */
 @Composable
-private fun SectionCard(title: String, content: @Composable () -> Unit) {
+private fun SectionCard(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    content: @Composable () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -513,7 +524,11 @@ private fun SectionCard(title: String, content: @Composable () -> Unit) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        // 09-15 路河：拒 emoji 图标 → 分区标题改用 v2 风格 Material 图标
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            if (icon != null) Icon(icon, contentDescription = null, tint = LuyuanColors.Green700)
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        }
         content()
     }
 }
@@ -536,7 +551,7 @@ private fun KeepAliveCard() {
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(
-            if (keepAliveOpen) "📱 vivo 保活指引（点收起）▴" else "📱 vivo 保活指引（提醒不响看这里）▾",
+            if (keepAliveOpen) "vivo 保活指引（点收起）▴" else "vivo 保活指引（提醒不响看这里）▾",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.clickable { keepAliveOpen = !keepAliveOpen }
@@ -544,7 +559,7 @@ private fun KeepAliveCard() {
         if (keepAliveOpen) {
             if (!exactOk) {
                 Text(
-                    "⚠️ 精确闹钟权限没开，提醒可能晚几分钟。点这里去开 →",
+                    "精确闹钟权限没开，提醒可能晚几分钟。点这里去开 →",
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.labelMedium,
                     modifier = Modifier
@@ -563,7 +578,7 @@ private fun KeepAliveCard() {
                 )
             } else {
                 Text(
-                    "✅ 精确闹钟权限已开，提醒准时。",
+                    "精确闹钟权限已开，提醒准时。",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp)
@@ -571,10 +586,10 @@ private fun KeepAliveCard() {
             }
             Text(
                 "提醒/速记条不灵，多半是 vivo 杀了后台。四步设置一次就好：\n" +
-                    "1️⃣ 放行自启动：i管家 → 应用管理 → 路远 → 权限 → 开「自启动」\n" +
-                    "2️⃣ 允许后台耗电：设置 → 电池 → 后台高耗电 → 路远开\n" +
-                    "3️⃣ 后台加锁：多任务界面 → 路远卡片往下拉，出现 🔒\n" +
-                    "4️⃣ 允许通知：设置 → 通知与状态栏 → 通知管理 → 路远全开",
+                    "1. 放行自启动：i管家 → 应用管理 → 路远 → 权限 → 开「自启动」\n" +
+                    "2. 允许后台耗电：设置 → 电池 → 后台高耗电 → 路远开\n" +
+                    "3. 后台加锁：多任务界面 → 路远卡片往下拉，出现锁图标\n" +
+                    "4. 允许通知：设置 → 通知与状态栏 → 通知管理 → 路远全开",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 6.dp)

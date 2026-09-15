@@ -47,7 +47,7 @@ class ShareActivity : Activity() {
         try {
             // tag「分享」标记来源；PC 端智能归类会另行追加分类标签，两者并存
             savedId = NoteRepository.createManual(this, body, tags = listOf("分享")).id
-            Toast.makeText(this, "✅ 已存入路远", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "已存入路远", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             Toast.makeText(this, "保存失败：${e.message}", Toast.LENGTH_SHORT).show()
         }
@@ -87,7 +87,7 @@ class ShareActivity : Activity() {
                 } else {
                     val text = if (rels.size == 1) "🖼 图片速记" else "🖼 图片速记（" + rels.size + " 张）"
                     NoteRepository.createManual(ctx, text, tags = listOf("分享"), images = rels)
-                    "✅ 已存入路远（" + rels.size + " 张图）"
+                    "已存入路远（" + rels.size + " 张图）"
                 }
             } catch (e: Exception) {
                 "保存失败：" + (e.message ?: "未知错误")

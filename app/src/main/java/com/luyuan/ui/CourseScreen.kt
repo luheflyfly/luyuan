@@ -67,6 +67,11 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.TextStyle
 import java.util.Locale
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 
 /**
  * 课程页 · 木案网格版（B5，2026-09-13 按.ui-mobile/v2/course-muan.html 施工）：
@@ -177,12 +182,9 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                             Toast.makeText(context, "在电脑端导入课表，同步后自动出现在这里", Toast.LENGTH_SHORT).show()
                         }
                         .padding(horizontal = 10.dp))
-                    Text("🤖", fontSize = 18.sp, modifier = Modifier
-                        .clickable { onAsk() }
-                        .padding(horizontal = 10.dp))
-                    Text("🗑", fontSize = 17.sp, modifier = Modifier
-                        .clickable { onTrash() }
-                        .padding(horizontal = 10.dp))
+                    // 09-15 路河：拒 emoji 图标 → Material（问路远=机器人 / 回收站=垃圾桶）
+                    IconButton(onClick = onAsk) { Icon(Icons.Default.SmartToy, contentDescription = "问路远") }
+                    IconButton(onClick = onTrash) { Icon(Icons.Default.Delete, contentDescription = "回收站") }
                 }
             )
         }
@@ -223,7 +225,7 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                     ) {
                         Column(Modifier.weight(1f)) {
                             Text(
-                                "⏰ 下一节 · " + c.start,
+                                "下一节 · " + c.start,
                                 fontSize = 11.sp,
                                 color = Color(0xFFCFE0D6),
                                 modifier = Modifier

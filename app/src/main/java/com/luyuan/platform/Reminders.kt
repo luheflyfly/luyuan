@@ -64,7 +64,7 @@ object ReminderNotifications {
 
 /** 到点响铃 + 错过补弹的统一入口 */
 private fun fireReminder(context: Context, note: Note) {
-    ReminderNotifications.fire(context, note.id, "⏰ 提醒", note.text.take(200))
+    ReminderNotifications.fire(context, note.id, "提醒", note.text.take(200))
     NoteRepository.markReminderFired(context, note.id)
 }
 
@@ -119,7 +119,7 @@ object ReminderScheduler {
             .sortedBy { (_, _, at) -> at }
         for ((c, t, _) in todoOverdue.take(5)) {
             if (t.done || t.reminded == true) continue
-            ReminderNotifications.fire(context, "ctodo_${t.id}", "⏰ ${c.name}的待办", t.text.take(200), ReminderNotifications.CHANNEL_TODO)
+            ReminderNotifications.fire(context, "ctodo_${t.id}", "${c.name}的待办", t.text.take(200), ReminderNotifications.CHANNEL_TODO)
             ContactRepository.markTodoReminded(context, c.id, t.id)
         }
     }
@@ -179,7 +179,7 @@ class ReminderReceiver : BroadcastReceiver() {
             val t = c.todos.firstOrNull { it.id == todoId } ?: return
             if (t.done || t.reminded == true) return
             ReminderNotifications.fire(
-                context, "ctodo_$todoId", "⏰ ${c.name}的待办", t.text.take(200),
+                context, "ctodo_$todoId", "${c.name}的待办", t.text.take(200),
                 ReminderNotifications.CHANNEL_TODO
             )
             ContactRepository.markTodoReminded(context, contactId, todoId)
@@ -272,7 +272,7 @@ object JournalReminder {
         )
         val n = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_tile_mic)
-            .setContentTitle("📔 该记日记啦")
+            .setContentTitle("该记日记啦")
             .setContentText("今天想记录点什么？点这里打开路远")
             .setContentIntent(pi)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)

@@ -190,7 +190,7 @@ class FloatingQuickNoteService : Service() {
         if (text.isNotEmpty()) {
             try {
                 com.luyuan.data.NoteRepository.createManual(this, text)
-                Toast.makeText(this, "✅ 已记下", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "已记下", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Toast.makeText(this, "保存失败：${e.message}", Toast.LENGTH_LONG).show()
             }

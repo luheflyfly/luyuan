@@ -70,7 +70,7 @@ class MessageNotificationListener : NotificationListenerService() {
                         created_at = PendingMessageTodoStore.nowIso()
                     )
                     PendingMessageTodoStore.add(this, todo)
-                    notifyTodoAction(this, todo)   // 2026-09-15：通知栏直接已完成/不要
+                    notifyTodoAction(this, todo)   // 2026-09-15：通知栏直达 已完成/收下/不要
                 } catch (_: Throwable) {
                 }
             }
@@ -123,6 +123,7 @@ class MessageNotificationListener : NotificationListenerService() {
                 .setAutoCancel(true)
                 .setContentIntent(tap)
                 .addAction(android.R.drawable.checkbox_on_background, "已完成", pi(TodoActionReceiver.ACTION_DONE, p.id.hashCode() * 10 + 1))
+                .addAction(android.R.drawable.ic_menu_agenda, "收下", pi(TodoActionReceiver.ACTION_KEEP, p.id.hashCode() * 10 + 3))
                 .addAction(android.R.drawable.ic_menu_close_clear_cancel, "不要", pi(TodoActionReceiver.ACTION_DROP, p.id.hashCode() * 10 + 2))
             nm.notify(TodoActionReceiver.TAG, p.id.hashCode(), builder.build())
         } catch (_: Throwable) {

@@ -221,7 +221,7 @@ fun AppRoot(startDest: String) {
                         ctx, "🖼 图片速记", tags = listOf("分享"), images = listOf(rel)
                     )
                     expanded = false
-                    android.widget.Toast.makeText(ctx, "✅ 图片已存入路远", android.widget.Toast.LENGTH_SHORT).show()
+                    android.widget.Toast.makeText(ctx, "图片已存入路远", android.widget.Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -345,7 +345,11 @@ fun AppRoot(startDest: String) {
                                 },
                                 onDetail = { id -> nav.navigate("detail/$id") },
                                 onTrash = { nav.navigate("trash") },
-                                onTodos = { nav.navigate("todos") } // 顶栏📋 → 独立待办页（IA 重排：笔记页不再放待办卡/回顾/设置）
+                                onTodos = { nav.navigate("todos") }, // 顶栏待办图标 → 独立待办页（IA 重排）
+                                // 09-15 路河「设置页面不在了」：左缘右滑带与系统返回手势竞争不可靠，
+                                // 顶栏常驻 问路远/设置 两枚图标入口（左缘抽屉仍保留作快捷手势）
+                                onAsk = { showAsk = true },
+                                onSettings = { showSettings = true }
                             )
                             1 -> if (com.luyuan.data.BottomNavPrefs.showLedger(context0)) LedgerScreen(
                                 vm = vm,
@@ -428,60 +432,6 @@ fun AppRoot(startDest: String) {
                         }
                 )
             }
-            // 09-14 晨：胶囊展开态 = 独立输入窗口（打字可见性第三修，窗口级键盘避让见 TerminalInputDialog）
-            if (expanded && currentRoute == "home" && !multiSelect) {
-                com.luyuan.ui.TerminalInputDialog(
-                    searchMode = searchMode,
-                    searchQuery = searchQuery,
-                    onSearchQueryChange = { vm.setSearchQuery(it) },
-                    onToggleSearch = {
-                        searchMode = !searchMode
-                        if (!searchMode) vm.setSearchQuery("")
-                    },
-                    inputText = inputText,
-                    onInputTextChange = {
-                        inputText = it
-                        draftPrefs.edit().putString("terminal_draft", it).apply()
-                    },
-                    onCommit = {
-                        val t = inputText.trim()
-                        if (t.isNotBlank()) {
-                            vm.addManual(t)
-                            inputText = ""
-                            draftPrefs.edit().remove("terminal_draft").apply()
-                            expanded = false
-                            searchMode = false
-                            focusManager.clearFocus()
-                        }
-                    },
-                    onSaveDiary = {
-                        val t = inputText.trim()
-                        if (t.isNotBlank()) {
-                            vm.saveDiary(t)
-                            inputText = ""
-                            draftPrefs.edit().remove("terminal_draft").apply()
-                            expanded = false
-                            focusManager.clearFocus()
-                            scope.launch { pagerState.animateScrollToPage(3) }
-                        }
-                    },
-                    onPickImage = {
-                        pickImage.launch(
-                            androidx.activity.result.PickVisualMediaRequest(
-                                androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly
-                            )
-                        )
-                    },
-                    onRecord = {
-                        vm.startWavRecording()
-                        nav.navigate("record") { launchSingleTop = true }
-                    },
-                    onDismiss = {
-                        expanded = false
-                        focusManager.clearFocus()
-                    }
-                )
-            }
             // Q12：存进今天日记后的可点回执（胶囊上方，不挡输入）
             if (showDiaryEcho && currentRoute == "home" && !multiSelect) {
                 Box(
@@ -498,19 +448,20 @@ fun AppRoot(startDest: String) {
                         .padding(horizontal = 16.dp, vertical = 10.dp)
                 ) {
                     Text(
-                        "📔 已存入今天的日记 · 去看看",
+                        "已存入今天的日记 · 去看看",
                         color = Color.White,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium
                     )
                 }
             }
-            // 悬浮终端胶囊 v3（收起态仅语音钮，点开弹独立输入窗口；多选时收起）
-            // 09-14 晨第三修「打字看不见」：展开态的输入搬到 TerminalInputDialog（独立窗口），
-            // 胶囊本体恒收起——主窗口的 IME insets 在路河 vivo/鸿蒙 4 上拿不到，Dialog 窗口级避让全 ROM 可靠。
+            // 悬浮终端胶囊 v3（多选时收起）
+            // 09-15 路河实测拍板回退：恢复「点一下胶囊就地展开」（Q13 拍板版），撤掉 TerminalInputDialog 中转。
+            // 已知权衡：vivo/鸿蒙 4 主窗口 IME insets 可能拿不到——若「打字被键盘挡住」回归，就在展开态输入框上
+            // 继续治（胶囊层 imePadding 已挂），不再改道独立窗口。
             if (currentRoute == "home" && !multiSelect) {
                 TerminalCapsule(
-                    expanded = false,
+                    expanded = expanded,
                     onToggleExpanded = { expanded = !expanded },
                     searchMode = searchMode,
                     searchQuery = searchQuery,

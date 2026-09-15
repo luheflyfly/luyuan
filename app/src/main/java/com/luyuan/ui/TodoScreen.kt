@@ -54,7 +54,7 @@ import java.time.format.DateTimeFormatter
 
 /**
  * 待办页（09-14 路河拍板：脱离人脉页独立成子界面）：
- * ①📬 待确认 = 消息待办未确认（✓ 收下 / ✗ 不要，动作与笔记页一致）
+ * ①待确认 = 消息待办未确认（已完成 / 收下 / 不要 三按钮一步式；通知栏同三动作）
  * ②📋 未办 = 已确认消息待办 + 联系人待人办，**按截止时间升序**（无期限排最后）。
  * 截止时间 = remind_at（联系人）或 when_text/原文的确定性解析（今天/明天/后天/周X/M月D日/HH:MM…），
  * 解析不出=无期限。到点判断只做展示（红色「已过期」），提醒仍归各自原有管线。
@@ -195,8 +195,9 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
                             )
                             Spacer(Modifier.height(6.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                // 2026-09-15 路河拍板：待确认只给“已完成”（一步办掉，省一次点击）和“不要”；
-                                // “收下再勾选”两步合并；“跳微信”只到 App 首页不到会话，无用，移除。
+                                // 2026-09-15 路河复板（实测步数账）：三按钮「已完成 / 收下 / 不要」——
+                                // 已完成=一步办掉；收下=真待办进未办；不要=丢弃；
+                                // 跳微信（只到微信首页不到会话）无用，已移除。
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier
@@ -217,6 +218,14 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
                                     Spacer(Modifier.width(4.dp))
                                     Text("已完成", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.SemiBold)
                                 }
+                                Spacer(Modifier.width(8.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .border(1.dp, LuyuanColors.Green700, RoundedCornerShape(999.dp))
+                                        .clickable { confirm(p) }
+                                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                                ) { Text("收下", fontSize = 12.sp, color = LuyuanColors.Green700, fontWeight = FontWeight.SemiBold) }
                                 Spacer(Modifier.width(8.dp))
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -291,17 +300,6 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
                 }
             }
         }
-    }
-}
-
-// ---------- 打开微信（待确认/待办卡快捷入口；「回溯真源」= 日后深链到具体会话，本批只拉起） ----------
-
-internal fun openWechat(ctx: android.content.Context) {
-    try {
-        val i = ctx.packageManager.getLaunchIntentForPackage("com.tencent.mm")
-        if (i != null) ctx.startActivity(i)
-        else android.widget.Toast.makeText(ctx, "没找到微信", android.widget.Toast.LENGTH_SHORT).show()
-    } catch (_: Throwable) {
     }
 }
 

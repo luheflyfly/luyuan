@@ -20,6 +20,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -187,9 +189,9 @@ fun DetailEditScreen(
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        if (source == "voice") MetaBadge("🎙 语音")
-                        if (tagsText.contains("分享")) MetaBadge("🔗 分享")
-                        if (device == "phone") MetaBadge("📱 手机")
+                        if (source == "voice") MetaBadge("语音")
+                        if (tagsText.contains("分享")) MetaBadge("分享")
+                        if (device == "phone") MetaBadge("手机")
                     }
                 }
                 OutlinedTextField(
@@ -260,7 +262,7 @@ fun DetailEditScreen(
                         .padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("🎙 原声", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("原声", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     val rel = audioRel!!
                     val f = remember(rel) {
                         java.io.File(StorageLocator.getRoot(context), rel)
@@ -299,7 +301,11 @@ fun DetailEditScreen(
                                     playing = false
                                 }
                             },
-                            label = { Text(if (playing) "⏸ 暂停原声" else "▶ 播放原声") }
+                            leadingIcon = {
+                                Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    contentDescription = null, modifier = Modifier.size(18.dp))
+                            },
+                            label = { Text(if (playing) "暂停原声" else "播放原声") }
                         )
                     } else {
                         Text(
@@ -321,10 +327,10 @@ fun DetailEditScreen(
                         .padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("📜 原始识别", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("原始识别", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     AssistChip(
                         onClick = { showRaw = !showRaw },
-                        label = { Text(if (showRaw) "🙈 收起原稿" else "看电脑纠错前的原稿") }
+                        label = { Text(if (showRaw) "收起原稿" else "看电脑纠错前的原稿") }
                     )
                     if (showRaw) {
                         Text(
@@ -347,7 +353,7 @@ fun DetailEditScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("⏰ 提醒", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Text("提醒", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                     Text(
                         text = remindAt?.let { "已设 ${formatRemind(it)}" } ?: "未设置",
                         style = MaterialTheme.typography.labelMedium,
@@ -378,7 +384,7 @@ fun DetailEditScreen(
                         // 一步选具体时间（任务单 App-3：默认今天，拨盘直接选时分）
                         pickedDate = LocalDate.now()
                         showTimePicker = true
-                    }, label = { Text("⏱ 选具体时间") })
+                    }, label = { Text("选具体时间") })
                     AssistChip(onClick = {
                         val now = LocalDateTime.now()
                         val iso = isoTomorrowAt(now.hour, now.minute)

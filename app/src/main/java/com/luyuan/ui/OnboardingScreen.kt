@@ -41,6 +41,16 @@ import com.luyuan.platform.StorageLocator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DesktopWindows
+import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.Spa
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
  * 首启引导三页（v2/onboarding.html 施工，2026-09-13 批）：①我是谁 ②授权+目录防呆 ③三招上手。
@@ -85,7 +95,8 @@ fun OnboardingScreen(vm: LuyuanViewModel, onDone: () -> Unit) {
                         .align(Alignment.Center)
                         .padding(horizontal = 30.dp)
                 ) {
-                    Text("🌿", fontSize = 64.sp)
+                    Icon(Icons.Default.Spa, contentDescription = null,
+                        modifier = Modifier.size(64.dp), tint = LuyuanColors.Green700)
                     Spacer(Modifier.height(26.dp))
                     Text(
                         "你好，我是路远",
@@ -123,11 +134,11 @@ fun OnboardingScreen(vm: LuyuanViewModel, onDone: () -> Unit) {
                             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
                             .padding(14.dp)
                     ) {
-                        FlowNode("📱", "手机笔记")
+                        FlowNode(Icons.Default.PhoneAndroid, "手机笔记")
                         ArrowLine()
-                        FlowNode("📁", "共享文件夹")
+                        FlowNode(Icons.Default.Folder, "共享文件夹")
                         ArrowLine()
-                        FlowNode("🖥", "电脑")
+                        FlowNode(Icons.Default.DesktopWindows, "电脑")
                     }
                     Spacer(Modifier.height(6.dp))
                     Text(
@@ -152,7 +163,7 @@ fun OnboardingScreen(vm: LuyuanViewModel, onDone: () -> Unit) {
                             fontSize = 11.sp, color = LuyuanColors.Ink4
                         )
                     } else {
-                        Text("✅ 已授权存储", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = LuyuanColors.Green700)
+                        Text("已授权存储", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = LuyuanColors.Green700)
                     }
                     Spacer(Modifier.height(10.dp))
                     Button(
@@ -220,9 +231,9 @@ fun OnboardingScreen(vm: LuyuanViewModel, onDone: () -> Unit) {
                 ) {
                     Text("三招，今天就用上", fontSize = 19.sp, fontWeight = FontWeight.ExtraBold, color = LuyuanColors.Green700)
                     Spacer(Modifier.height(18.dp))
-                    Trick("✏️", "记一笔", "主页下方胶囊点开，打字回车就是一条笔记")
-                    Trick("🎙", "说一句", "胶囊的话筒按住说话；或音量加+减一起按，随时随地录音")
-                    Trick("🤖", "问路远", "左缘往右滑问它任何事，它读得到你的笔记和待办")
+                    Trick(Icons.Default.EditNote, "记一笔", "主页下方胶囊点开，打字回车就是一条笔记")
+                    Trick(Icons.Default.Mic, "说一句", "胶囊的话筒按住说话；或音量加+减一起按，随时随地录音")
+                    Trick(Icons.Default.SmartToy, "问路远", "笔记页右上角点机器人图标问它任何事；齿轮是设置；左缘右滑是快捷手势")
                     Spacer(Modifier.height(16.dp))
                     Text(
                         "装好后长按桌面，还能把「今日卡」拖出去。",
@@ -274,9 +285,9 @@ fun OnboardingScreen(vm: LuyuanViewModel, onDone: () -> Unit) {
 }
 
 @Composable
-private fun FlowNode(emoji: String, label: String) {
+private fun FlowNode(icon: ImageVector, label: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(emoji, fontSize = 22.sp)
+        Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp), tint = LuyuanColors.Green700)
         Text(label, fontSize = 10.5.sp, color = LuyuanColors.Ink2)
     }
 }
@@ -287,7 +298,7 @@ private fun ArrowLine() {
 }
 
 @Composable
-private fun Trick(emoji: String, title: String, desc: String) {
+private fun Trick(icon: ImageVector, title: String, desc: String) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -296,7 +307,7 @@ private fun Trick(emoji: String, title: String, desc: String) {
             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
             .padding(13.dp)
     ) {
-        Text(emoji, fontSize = 22.sp)
+        Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp), tint = LuyuanColors.Green700)
         Spacer(Modifier.width(12.dp))
         Column {
             Text(title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = LuyuanColors.Ink1)

@@ -190,12 +190,12 @@ class TodayWidgetProvider : AppWidgetProvider() {
             views.setTextColor(R.id.widget_course_countdown, 0xFF4F8A73.toInt())
             views.setTextColor(R.id.widget_course_countdown_label, 0xFF4F8A73.toInt())
             views.setTextViewText(R.id.widget_course_hint, "课程")
-            views.setTextViewText(R.id.widget_course_name, "今天没课 🌿 自习好日子")
+            views.setTextViewText(R.id.widget_course_name, "今天没课 · 自习好日子")
             views.setTextViewText(
                 R.id.widget_course_place,
                 if (courses.isEmpty()) "去课程页添加课表" else "好好休息"
             )
-            views.setTextViewText(R.id.widget_course_countdown, "🌿")
+            views.setTextViewText(R.id.widget_course_countdown, "－")
             views.setTextViewText(R.id.widget_course_countdown_label, "自习")
         }
 

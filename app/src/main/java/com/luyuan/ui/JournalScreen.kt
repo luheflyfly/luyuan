@@ -415,7 +415,7 @@ fun JournalScreen(vm: LuyuanViewModel, onRecord: () -> Unit, onReview: () -> Uni
                                         )
                                         if (d.images.isNotEmpty()) {
                                             Text(
-                                                "🖼${d.images.size}",
+                                                "${d.images.size} 图",
                                                 fontSize = 11.sp,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )

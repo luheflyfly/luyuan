@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -105,13 +107,13 @@ fun RecordScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
         ) {
             // 模式切换
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                ModeChip("📼 录音待转写", mode == MODE_RECORD) {
+                ModeChip("录音待转写", mode == MODE_RECORD) {
                     vm.cancelRecording()
                     vm.rememberVoiceMode("record")
                     mode = MODE_RECORD
                 }
                 if (offlineOk) {
-                    ModeChip("📴 离线识别", mode == MODE_OFFLINE) {
+                    ModeChip("离线识别", mode == MODE_OFFLINE) {
                         vm.cancelRecording()
                         vm.rememberVoiceMode("offline")
                         mode = MODE_OFFLINE
@@ -123,7 +125,8 @@ fun RecordScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
             when (mode) {
                 MODE_RECORD -> {
                     Spacer(Modifier.height(4.dp))
-                    Text("🎙️", fontSize = 64.sp)
+                    Icon(Icons.Default.Mic, contentDescription = null,
+                        modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.primary)
                     // 录音计时
                     var tick by remember { mutableLongStateOf(0L) }
                     LaunchedEffect(wavStartedAt) {
@@ -153,7 +156,7 @@ fun RecordScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
                         ) { Text("停止") }
                     } else {
                         Text(
-                            if (savedMsg.startsWith("已录音")) "✅ $savedMsg" else "录下原声，回家自动转写",
+                            if (savedMsg.startsWith("已录音")) savedMsg else "录下原声，回家自动转写",
                             style = MaterialTheme.typography.bodyLarge
                         )
                         Text(
@@ -171,11 +174,12 @@ fun RecordScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
                 else -> {
                     // 离线识别
                     Spacer(Modifier.height(4.dp))
-                    Text("📴", fontSize = 64.sp)
+                    Icon(Icons.Default.CloudOff, contentDescription = null,
+                        modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.primary)
                     val busy by vm.offlineBusy.collectAsStateWithLifecycle()
                     when {
                         busy -> {
-                            Text("⏳ 本机识别中…", fontSize = 20.sp)
+                            Text("本机识别中…", fontSize = 20.sp)
                             Text(
                                 "首次识别要先加载模型（几秒钟），请稍等",
                                 style = MaterialTheme.typography.labelSmall,
@@ -206,7 +210,7 @@ fun RecordScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
                         }
                         else -> {
                             Text(
-                                if (savedMsg.isNotBlank()) "✅ 已记下" else "离线识别：不出网也能转文字",
+                                if (savedMsg.isNotBlank()) "已记下" else "离线识别：不出网也能转文字",
                                 style = MaterialTheme.typography.bodyLarge
                             )
                             Text(
@@ -220,7 +224,7 @@ fun RecordScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
                             ) { Text(if (savedMsg.isNotBlank()) "再录一段" else "开始录音") }
                             voiceError?.let {
                                 Text(
-                                    "⚠️ $it",
+                                    "$it",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.error
                                 )
