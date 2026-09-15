@@ -55,6 +55,32 @@ object MessageSettings {
         }
     }
 
+    // ---------- 不计入待办的联系人（2026-09-15 路河：朋友闲聊不进工作流，待办服务大学工作） ----------
+    // 存 App 私有 prefs（隐私红线同上：不进同步目录）。语义三道闸：
+    // ①监听入口 title 命中即丢弃；②待办页显示层 who/sender 命中即隐（PC 端生成的 todo_*.json 也被滤）；
+    // ③待确认卡长按快捷加入。PC 端采集侧自行实现同名排除，todo_*.json 格式零改动。
+
+    private const val EXCLUDED_KEY = "todo_excluded_contacts"
+
+    /** 排除名单（trim 后精确匹配） */
+    fun excludedContacts(ctx: Context): Set<String> =
+        p(ctx).getStringSet(EXCLUDED_KEY, emptySet()) ?: emptySet()
+
+    fun isExcluded(ctx: Context, name: String): Boolean {
+        val n = name.trim()
+        return n.isNotEmpty() && n in excludedContacts(ctx)
+    }
+
+    fun addExcluded(ctx: Context, name: String) {
+        val n = name.trim()
+        if (n.isEmpty()) return
+        p(ctx).edit().putStringSet(EXCLUDED_KEY, excludedContacts(ctx) + n).apply()
+    }
+
+    fun removeExcluded(ctx: Context, name: String) {
+        p(ctx).edit().putStringSet(EXCLUDED_KEY, excludedContacts(ctx) - name.trim()).apply()
+    }
+
     // ---------- 本月外发计数（透明可查） ----------
 
     private fun ym(): String = java.time.YearMonth.now().toString()

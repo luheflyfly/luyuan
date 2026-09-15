@@ -316,14 +316,6 @@ fun NoteListScreen(
     val scope = rememberCoroutineScope()
     val keyboard = LocalSoftwareKeyboardController.current
 
-    // IA 重排（2026-09-15）：待办确认卡迁往独立「待办」页（顶栏📋，带数量红点），笔记页只管笔记。
-    // 每次回到列表都重新读盘；顺带刷新📋红点计数
-    var pendingTodoCount by remember { mutableStateOf(0) }
-    LaunchedEffect(Unit) {
-        // 数据已在 ViewModel.init 拉过一次 + FileObserver 增量更新，进页不再全量重扫（防并发卡顿）
-        pendingTodoCount = com.luyuan.data.PendingMessageTodoStore.list(context).size
-    }
-
     val filtered = remember(notes, query) {
         if (query.isBlank()) notes else notes.filter {
             it.text.contains(query, ignoreCase = true) ||
@@ -418,22 +410,10 @@ fun NoteListScreen(
                             else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    IconButton(onClick = onTodos) {
-                        BadgedBox(badge = {
-                            if (pendingTodoCount > 0) Badge { Text("$pendingTodoCount") }
-                        }) { Icon(Icons.Default.TaskAlt, contentDescription = "待办") }
-                    }
                     IconButton(onClick = onTrash) {
                         Icon(Icons.Default.DeleteOutline, contentDescription = "回收站")
                     }
-                    // 09-15 路河：设置/问路远常驻入口（此前只靠左缘右滑带，时灵时不灵=「设置页面不在了」）
-                    IconButton(onClick = onAsk) {
-                        Icon(Icons.Default.SmartToy, contentDescription = "问路远")
-                    }
-                    IconButton(onClick = onSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "设置")
-                    }
-
+                    // 09-15 夜 IA 重排：待办升底栏一级页、问路远进胶囊、设置进底栏齿轮——顶栏从 6 枚瘦到 3 枚
                 }
             )
         }
@@ -565,7 +545,7 @@ fun NoteListScreen(
                                 Text(
                                     g.label,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = Color(0xFF374151),
+                                    color = LuyuanColors.Ink2,
                                     fontSize = 14.sp
                                 )
                                 Spacer(Modifier.size(8.dp))
@@ -614,7 +594,7 @@ fun NoteListScreen(
                             if (query.isNotBlank())
                                 EmptyState(EmptyIconSearch, "没有匹配的笔记", "换个关键词试试")
                             else
-                                EmptyState(EmptyIconNote, "还没有笔记", "在顶部输入框随手记一条，回车即存")
+                                EmptyState(EmptyIconNote, "还没有笔记", "点下方胶囊记一笔，或对着它说一句")
                         }
                     }
                 }
@@ -695,6 +675,7 @@ fun NoteCard(
 ) {
     val (title, summary) = remember(note.text) { splitTitleSummary(note.text) }
     Card(
+        shape = RoundedCornerShape(14.dp),
         modifier = Modifier.fillMaxWidth().combinedClickable(
             onClick = {
                 if (selecting) onToggleSelect() else onClick()
@@ -725,7 +706,7 @@ fun NoteCard(
                     text = highlighted(title, query),
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
-                    color = Color(0xFF111827),
+                    color = LuyuanColors.Ink1,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -733,7 +714,7 @@ fun NoteCard(
             if (summary.isNotEmpty()) {
                 Text(
                     text = highlighted(summary, query),
-                    color = Color(0xFF6B7280),
+                    color = LuyuanColors.Ink2,
                     fontSize = 13.sp,
                     lineHeight = 19.sp,
                     maxLines = 2,
@@ -748,13 +729,13 @@ fun NoteCard(
             ) {
                 Badge(
                     if (note.source == "voice") "语音" else "手动",
-                    if (note.source == "voice") Color(0xFF059669) else Color(0xFF1D4ED8)
+                    if (note.source == "voice") LuyuanColors.Blue else LuyuanColors.Green500
                 )
-                if (note.device == "phone") Badge("手机", Color(0xFF6B7280))
-                if (note.transcribed == false) Badge("待转写", Color(0xFFD97706))
-                if (note.audio != null && note.transcribed == true) Badge("原声", Color(0xFF059669))
+                if (note.device == "phone") Badge("手机", LuyuanColors.Ink3)
+                if (note.transcribed == false) Badge("待转写", LuyuanColors.Amber)
+                if (note.audio != null && note.transcribed == true) Badge("原声", LuyuanColors.Green500)
                 remindBadge(note)
-                for (t in note.tags.take(3)) Badge(t, Color(0xFF6B7280))
+                for (t in note.tags.take(3)) Badge(t, LuyuanColors.Ink3)
                 Spacer(Modifier.size(2.dp))
                 Text(
                     formatTime(note.created_at),
@@ -781,5 +762,5 @@ private fun remindBadge(note: Note) {
             ra // 兜底显示原文
         }
     }
-    Badge("$shown 提醒", Color(0xFFD97706))
+    Badge("$shown 提醒", LuyuanColors.Amber)
 }

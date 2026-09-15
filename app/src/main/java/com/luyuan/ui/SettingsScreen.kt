@@ -34,6 +34,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -376,6 +377,8 @@ private fun MessageTodoCard() {
             var groups by remember { mutableStateOf(MessageSettings.groupsOn(context)) }
     var access by remember { mutableStateOf(MessageSettings.notificationAccess(context)) }
     var sent by remember { mutableStateOf(MessageSettings.sentCountThisMonth(context)) }
+    var excluded by remember { mutableStateOf(MessageSettings.excludedContacts(context)) }
+    var newExcluded by remember { mutableStateOf("") }
 
     Column(
         modifier = Modifier
@@ -491,6 +494,42 @@ private fun MessageTodoCard() {
                         MessageSettings.setGroupsOn(context, it)
                     }
                 )
+            }
+
+            // ⑤ 不计入待办（09-15 路河：朋友闲聊不进工作流，待办服务大学工作/班长事务）
+            Text("⑤不计入待办的联系人", fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
+            Text(
+                "名单里的人/群，消息不再自动变待办，待办页也不再显示（电脑端同步来的待办同样会滤掉）。" +
+                    "快捷法：待办页长按待确认卡可直接加入。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            excluded.sorted().forEach { name ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(name, fontSize = 13.sp, color = LuyuanColors.Ink2, modifier = Modifier.weight(1f))
+                    Text(
+                        "移出", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable {
+                            MessageSettings.removeExcluded(context, name)
+                            excluded = MessageSettings.excludedContacts(context)
+                        }
+                    )
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = newExcluded,
+                    onValueChange = { newExcluded = it },
+                    singleLine = true,
+                    placeholder = { Text("联系人或群名", fontSize = 12.sp) },
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = {
+                    MessageSettings.addExcluded(context, newExcluded)
+                    newExcluded = ""
+                    excluded = MessageSettings.excludedContacts(context)
+                }) { Text("加入") }
             }
 
             // ④ 外发计数（透明可查）

@@ -32,6 +32,8 @@ class MessageNotificationListener : NotificationListenerService() {
 
             val ex = sbn.notification?.extras ?: return
             val title = ex.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim().orEmpty()
+            // 不计入待办名单（09-15 路河：朋友闲聊不进工作流）——命中即静默丢，不解析不出网
+            if (MessageSettings.isExcluded(this, title)) return
             val text = ex.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim().orEmpty()
             val big = ex.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()?.trim().orEmpty()
             val body = when {

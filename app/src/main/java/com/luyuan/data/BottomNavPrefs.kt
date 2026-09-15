@@ -22,9 +22,9 @@ object BottomNavPrefs {
     fun set(ctx: Context, key: String, v: Boolean) =
         prefs(ctx).edit().putBoolean(key, v).apply()
 
-    /** 固定五页槽位（index 与历史深链一致：0笔记 1记账 2课程 3日记 4人脉），返回可见槽位 */
+    /** 固定页槽位（index 与历史深链一致：0笔记 3日记 5待办；vc79 待办升底栏一级页），返回可见槽位 */
     fun visibleSlots(ctx: Context): List<Int> {
-        val out = mutableListOf(0, 3)   // 笔记、日记永远在
+        val out = mutableListOf(0, 3, 5)   // 笔记、日记、待办固定在底栏
         if (showLedger(ctx)) out.add(1)
         if (showCourse(ctx)) out.add(2)
         if (showPeople(ctx)) out.add(4)

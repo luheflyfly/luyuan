@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -65,6 +66,7 @@ fun TerminalCapsule(
     onCommitDiary: () -> Unit,
     onSaveDiary: () -> Unit,
     onPickImage: () -> Unit,
+    onAsk: () -> Unit = {},
     onRecord: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -153,6 +155,9 @@ fun TerminalCapsule(
                     // 搜索态：退出搜索
                     ExpandedAction("退出搜索", Icons.Default.Close, onToggleSearch)
                 } else {
+                    // 09-15 夜 IA 重排：问路远入口迁进胶囊（笔记页顶栏瘦身），与 日记/搜索/图片 同排
+                    ExpandedAction("问路远", Icons.Default.SmartToy, onAsk)
+                    Spacer(Modifier.width(6.dp))
                     ExpandedAction("日记", Icons.Default.EditNote, onSaveDiary)
                     Spacer(Modifier.width(6.dp))
                     ExpandedAction("搜索", Icons.Default.Search, onToggleSearch)

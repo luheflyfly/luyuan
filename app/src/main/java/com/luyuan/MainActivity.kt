@@ -39,6 +39,8 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -86,6 +88,7 @@ import com.luyuan.ui.rememberPressScale
 import com.luyuan.ui.PeopleScreen
 import com.luyuan.ui.RecordScreen
 import com.luyuan.ui.SettingsScreen
+import com.luyuan.ui.TodoScreen
 import com.luyuan.ui.AskKeyScreen
 import com.luyuan.ui.TerminalCapsule
 import com.luyuan.ui.TrashScreen
@@ -270,6 +273,7 @@ fun AppRoot(startDest: String) {
                     "course" -> 2
                     "journal" -> 3
                     "people" -> 4
+                    "todos" -> 5
                     else -> 0
                 }
                 pagerState.scrollToPage(idx)
@@ -287,6 +291,18 @@ fun AppRoot(startDest: String) {
     var navPrefsVersion by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
     val visibleSlots = androidx.compose.runtime.remember(navPrefsVersion) { com.luyuan.data.BottomNavPrefs.visibleSlots(context0) }
 
+    // 待确认待办红点（vc79：挂底栏「待办」钮）：进页/切页即数 + 每 15s 兜底轮询（通知栏动作改动无广播）
+    var pendingTodoCount by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    androidx.compose.runtime.LaunchedEffect(pagerState.currentPage) {
+        pendingTodoCount = runCatching { com.luyuan.data.PendingMessageTodoStore.list(ctx).size }.getOrDefault(0)
+    }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(15_000)
+            pendingTodoCount = runCatching { com.luyuan.data.PendingMessageTodoStore.list(ctx).size }.getOrDefault(0)
+        }
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         // edge-to-edge 配套：外壳不管状态栏/导航栏 insets——各屏自己的 Scaffold/TopAppBar
@@ -296,11 +312,13 @@ fun AppRoot(startDest: String) {
         bottomBar = {
             if (currentRoute == "home") {
                 NavigationBar(containerColor = MaterialTheme.colorScheme.background) {
+                    // vc79 IA 重排：固定核心=笔记/待办/日记，可开关=记账/课程/人脉，最右=设置齿轮（开抽屉非页面）
                     val tabsAll = listOf(
                         Triple(0, "笔记", Icons.AutoMirrored.Filled.Notes),
+                        Triple(5, "待办", Icons.Default.TaskAlt),
+                        Triple(3, "日记", Icons.Default.EditNote),
                         Triple(1, "记账", Icons.Default.Payments),
                         Triple(2, "课程", Icons.Default.CalendarMonth),
-                        Triple(3, "日记", Icons.Default.EditNote),
                         Triple(4, "人脉", Icons.Default.People)
                     )
                     // 被用户从底栏移除的页不显示按钮（页面本身仍可从待办/深链/左缘进入）
@@ -316,12 +334,30 @@ fun AppRoot(startDest: String) {
                                 scope.launch { pagerState.scrollToPage(page) }
                             }
                         },
-                        icon = { Icon(icon, contentDescription = label) },
+                        icon = {
+                            if (page == 5) {
+                                // 待办红点：待确认消息待办条数（vc79 从笔记页顶栏迁来）
+                                androidx.compose.material3.BadgedBox(badge = {
+                                    if (pendingTodoCount > 0) {
+                                        androidx.compose.material3.Badge { Text("$pendingTodoCount") }
+                                    }
+                                }) { Icon(icon, contentDescription = label) }
+                            } else {
+                                Icon(icon, contentDescription = label)
+                            }
+                        },
                         label = { Text(label) },
                         interactionSource = navInteraction,
                         modifier = Modifier.graphicsLayer { scaleX = navScale; scaleY = navScale }
                     )
                     }
+                    // 设置：底栏最右齿轮（vc79；开抽屉，不占页面槽位）
+                    NavigationBarItem(
+                        selected = showSettings,
+                        onClick = { showSettings = true },
+                        icon = { Icon(Icons.Default.Settings, contentDescription = "设置") },
+                        label = { Text("设置") }
+                    )
                 }
             }
         }
@@ -367,12 +403,9 @@ fun AppRoot(startDest: String) {
                                     nav.navigate("record") { launchSingleTop = true }
                                 },
                                 onDetail = { id -> nav.navigate("detail/$id") },
-                                onTrash = { nav.navigate("trash") },
-                                onTodos = { nav.navigate("todos") }, // 顶栏待办图标 → 独立待办页（IA 重排）
-                                // 09-15 路河「设置页面不在了」：左缘右滑带与系统返回手势竞争不可靠，
-                                // 顶栏常驻 问路远/设置 两枚图标入口（左缘抽屉仍保留作快捷手势）
-                                onAsk = { showAsk = true },
-                                onSettings = { showSettings = true }
+                                onTrash = { nav.navigate("trash") }
+                                // 09-15 夜 IA 重排：顶栏只留 心情/多选/回收站——待办升底栏一级页（slot 5），
+                                // 问路远进胶囊，设置进底栏齿轮（vc79 设计稿 D:\Luyuan\手机端UI大重绘_设计方案_2026-09-15夜.md）
                             )
                             1 -> if (com.luyuan.data.BottomNavPrefs.showLedger(context0)) LedgerScreen(
                                 vm = vm,
@@ -389,6 +422,7 @@ fun AppRoot(startDest: String) {
                                 vm.startWavRecording()
                                 nav.navigate("record") { launchSingleTop = true }
                             }, onReview = { nav.navigate("review") }) // 📊本周回顾迁来日记页（IA 重排）
+                            5 -> TodoScreen(vm = vm, onBack = { nav.popBackStack() }, embedded = true) // 待办升底栏一级页（vc79）
                             else -> if (com.luyuan.data.BottomNavPrefs.showPeople(context0)) PeopleScreen(vm = vm, onNoteClick = { nav.navigate("detail/$it") })
                             else HiddenTabHint("人脉") { navPrefsVersion++ }
                         }
@@ -529,6 +563,7 @@ fun AppRoot(startDest: String) {
                             )
                         )
                     },
+                    onAsk = { showAsk = true },
                     onRecord = {
                         vm.startWavRecording()
                         nav.navigate("record") { launchSingleTop = true }
