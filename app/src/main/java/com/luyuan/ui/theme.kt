@@ -1,8 +1,16 @@
 package com.luyuan.ui
 
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 
 // 手机 UI 方案 A「五键直达」主题（2026-09-08 路河拍板）：
@@ -82,3 +90,18 @@ fun LuyuanTheme(content: @Composable () -> Unit) {
         content = content
     )
 }
+
+/** 键盘高度实测兜底（vc77 起套路；vivo 上 WindowInsets.ime 恒 0 的全 ROM 解）。
+ *  MainActivity 的 GlobalLayout 监听写入，任何底部输入的屏（问路远等）直接读。 */
+object ImeFallback {
+    var measuredPx by mutableIntStateOf(0)
+}
+
+/** 底部输入的键盘抬升（vc80）：单源取 max(ime insets, 实测)——insets 可信机型行为不变，
+ *  vivo 上由实测抬升。等价 vc77 胶囊同款，收编成公共助手。 */
+@Composable
+fun imeLiftPadding(): Modifier = Modifier.padding(
+    bottom = with(LocalDensity.current) {
+        maxOf(WindowInsets.ime.getBottom(this), ImeFallback.measuredPx).toDp()
+    }
+)

@@ -213,7 +213,7 @@ fun PeopleScreen(vm: LuyuanViewModel, onNoteClick: (String) -> Unit = {}) {
                             Text(
                                 "待办",
                                 fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFF374151),
+                                color = LuyuanColors.Ink2,
                                 fontSize = 14.sp,
                                 modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
                             )
@@ -263,7 +263,7 @@ fun PeopleScreen(vm: LuyuanViewModel, onNoteClick: (String) -> Unit = {}) {
                             if (selGroup == null) "联系人 ${inGroup.size}"
                             else "$selGroup ${inGroup.size} 人 · " + if (showSid) "按学号" else "按拼音",
                             fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFF374151),
+                            color = LuyuanColors.Ink2,
                             fontSize = 14.sp,
                             modifier = Modifier.padding(top = 10.dp, bottom = 2.dp)
                         )

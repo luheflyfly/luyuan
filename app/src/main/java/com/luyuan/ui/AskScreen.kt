@@ -167,7 +167,9 @@ fun AskScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .imePadding()
+                // vc80：.imePadding() 换 imeLiftPadding()——vivo 上 ime insets 恒 0，由实测键盘高兜底
+                // （vc77 胶囊同款套路收编为公共助手）
+                .then(imeLiftPadding())
         ) {
             // ---------- 模型选择器（点击切换，状态常显） ----------
             Surface(

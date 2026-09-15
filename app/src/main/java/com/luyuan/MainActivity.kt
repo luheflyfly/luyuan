@@ -202,6 +202,7 @@ fun AppRoot(startDest: String) {
             rootView.getWindowVisibleDisplayFrame(rect)
             val h = rootView.height - rect.bottom
             measuredImePx = if (h > rootView.height / 4) h else 0
+            com.luyuan.ui.ImeFallback.measuredPx = measuredImePx // 其他底部输入屏（问路远等）同享
         }
         rootView.viewTreeObserver.addOnGlobalLayoutListener(listener)
         onDispose { rootView.viewTreeObserver.removeOnGlobalLayoutListener(listener) }
