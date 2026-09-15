@@ -230,7 +230,7 @@ fun PeopleScreen(vm: LuyuanViewModel, onNoteClick: (String) -> Unit = {}) {
                                             Box(
                                                 modifier = Modifier
                                                     .size(9.dp)
-                                                    .background(Color(0xFFEF4444), CircleShape)
+                                                    .background(LuyuanColors.Red, CircleShape)
                                             )
                                             Spacer(Modifier.width(8.dp))
                                             Text(c.name, fontWeight = FontWeight.Bold, fontSize = 16.sp)
@@ -385,7 +385,7 @@ private fun PeopleContactCard(c: Contact, showSidBadge: Boolean, onClick: () -> 
                 Box(
                     modifier = Modifier
                         .size(9.dp)
-                        .background(Color(0xFFEF4444), CircleShape)
+                        .background(LuyuanColors.Red, CircleShape)
                 )
             }
         }

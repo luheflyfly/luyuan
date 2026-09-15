@@ -49,7 +49,7 @@ import java.time.LocalDate
 import java.time.temporal.TemporalAdjusters
 
 /**
- * 本周回顾（v2/review.html 施工，2026-09-13 批）：入口=笔记页顶栏 📊。
+ * 本周回顾（v2/review.html 施工，2026-09-13 批）：入口=日记页「本周回顾」卡（vc79 IA 重排迁入）。
  * 一页看完本周：记录节奏柱图 / 心情序列 / 支出趋势 / 最常出现的人 / 本周最长的一句。
  * 🔴 全部只读——数据源=现有笔记/日记/账目，不生成任何记录、不外发。
  */

@@ -142,7 +142,7 @@ fun RecordScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
                         Text(
                             "● 录音中  %02d:%02d".format(secs / 60, secs % 60),
                             fontSize = 22.sp,
-                            color = Color(0xFFEF4444)
+                            color = LuyuanColors.Red
                         )
                         Text(
                             "停止后原声自动同步回电脑，转写完成文字就回来了",
@@ -152,7 +152,7 @@ fun RecordScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
                         Button(
                             onClick = { vm.stopWavRecording() },
                             modifier = Modifier.size(120.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444))
+                            colors = ButtonDefaults.buttonColors(containerColor = LuyuanColors.Red)
                         ) { Text("停止") }
                     } else {
                         Text(
@@ -200,12 +200,12 @@ fun RecordScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
                             Text(
                                 "● 录音中  %02d:%02d".format(secs / 60, secs % 60),
                                 fontSize = 22.sp,
-                                color = Color(0xFFEF4444)
+                                color = LuyuanColors.Red
                             )
                             Button(
                                 onClick = { vm.stopOfflineRecording() },
                                 modifier = Modifier.size(120.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444))
+                                colors = ButtonDefaults.buttonColors(containerColor = LuyuanColors.Red)
                             ) { Text("停止") }
                         }
                         else -> {
