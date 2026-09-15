@@ -248,8 +248,7 @@ fun SettingsScreen(vm: LuyuanViewModel, onBack: () -> Unit, onAsk: () -> Unit = 
                     android.provider.Settings.canDrawOverlays(context)
                 }
                 Text(
-                    "同时按「音量加 + 音量减」= 直接开始录音（录完回电脑转文字，不用本地模型）。\n" +
-                        "长按悬浮胶囊的语音圆钮 = 唤起输入法语音（讯飞长按空格代按；需无障碍已开且键盘正在输入，失败自动改录音。2026-09-14 夜新增）。",
+                    "同时按「音量加 + 音量减」= 直接开始录音（录完回电脑转文字，不用本地模型）。",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
@@ -285,8 +284,7 @@ fun SettingsScreen(vm: LuyuanViewModel, onBack: () -> Unit, onAsk: () -> Unit = 
                 Text(
                     "两种说法：\n" +
                         "① 录音待转写（默认推荐）：手机只存原声，回家由电脑大模型转写，最准；\n" +
-                        "② 本机离线识别：没网时的兜底，识别模型已内置在安装包里，无需手动导入。\n" +
-                        "长按悬浮胶囊语音钮还能唤起输入法语音（讯飞），见「⌨️ 实体键快捷」。",
+                        "② 本机离线识别：没网时的兜底，识别模型已内置在安装包里，无需手动导入。",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -321,6 +319,19 @@ fun SettingsScreen(vm: LuyuanViewModel, onBack: () -> Unit, onAsk: () -> Unit = 
                     enabled = AskRemote.loadConfig(context).ready,
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("开始对话") }
+            }
+
+            // ---------- 🧭 底栏自定义（2026-09-15 路河拍板：子界面可自由放底栏） ----------
+            SectionCard("🧭 底栏自定义") {
+                Text(
+                    "笔记、日记固定在底栏；下面三页可以自由收起，收起后仍能从待办页、左缘抽屉或深链进入。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                BottomNavToggle("记账", com.luyuan.data.BottomNavPrefs.KEY_LEDGER, com.luyuan.data.BottomNavPrefs.showLedger(context))
+                BottomNavToggle("课程", com.luyuan.data.BottomNavPrefs.KEY_COURSE, com.luyuan.data.BottomNavPrefs.showCourse(context))
+                BottomNavToggle("人脉", com.luyuan.data.BottomNavPrefs.KEY_PEOPLE, com.luyuan.data.BottomNavPrefs.showPeople(context))
             }
 
             // ---------- 📬 消息待办（立项单 2026-09-13 T4/T5） ----------
@@ -568,5 +579,25 @@ private fun KeepAliveCard() {
                 modifier = Modifier.padding(top = 6.dp)
             )
         }
+    }
+}
+
+/** 底栏开关行（2026-09-15） */
+@Composable
+private fun BottomNavToggle(label: String, key: String, initial: Boolean) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var on by androidx.compose.runtime.remember(key) { androidx.compose.runtime.mutableStateOf(initial) }
+    androidx.compose.foundation.layout.Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+    ) {
+        Text(label, fontSize = 14.sp, color = LuyuanColors.Ink1, modifier = Modifier.weight(1f))
+        androidx.compose.material3.Switch(
+            checked = on,
+            onCheckedChange = {
+                on = it
+                com.luyuan.data.BottomNavPrefs.set(context, key, it)
+            }
+        )
     }
 }

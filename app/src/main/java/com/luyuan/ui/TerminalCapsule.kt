@@ -3,8 +3,6 @@ package com.luyuan.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -192,31 +190,14 @@ fun TerminalCapsule(
 
 @Composable
 private fun VoiceButton(onRecord: () -> Unit) {
-    val ctx = androidx.compose.ui.platform.LocalContext.current
+    // 2026-09-15 路河拍板：讯飞语音是电脑端的事，手机胶囊语音钮短按即录音（撤回 vc71 长按代按）。
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
             .size(38.dp)
             .background(MaterialTheme.colorScheme.primary, CircleShape)
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = { onRecord() },
-                    onLongPress = {
-                        // 长按语音钮＝唤起输入法语音（vivo 讯飞长按空格代按，路河 2026-09-14 夜拍板复活）。
-                        // 无障碍未开或无输入法窗口时代按失败 → 回落录音页并提示，原声永不丢。
-                        val ok = try {
-                            com.luyuan.platform.VolumeKeyService.spaceLongPress()
-                        } catch (_: Exception) { false }
-                        if (ok) {
-                            android.widget.Toast.makeText(ctx, "已唤起输入法语音，说完点发送", android.widget.Toast.LENGTH_SHORT).show()
-                        } else {
-                            android.widget.Toast.makeText(ctx, "输入法语音不可用（需开启无障碍且键盘在输入），已改录音", android.widget.Toast.LENGTH_LONG).show()
-                            onRecord()
-                        }
-                    }
-                )
-            }
-    ) { Icon(Icons.Default.Mic, contentDescription = "录音（长按唤输入法语音）", tint = Color.White, modifier = Modifier.size(19.dp)) }
+            .clickable { onRecord() }
+    ) { Icon(Icons.Default.Mic, contentDescription = "录音", tint = Color.White, modifier = Modifier.size(19.dp)) }
 }
 
 @Composable

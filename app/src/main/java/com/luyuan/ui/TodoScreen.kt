@@ -68,14 +68,12 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
     var msgTodos by remember { mutableStateOf(TodoStore.list(context)) }
 
     fun reload() {
+        // 2026-09-15 治「返回笔记页卡死」：本页动作只局部读盘，不调 vm.refresh()
+        // （refresh 写盘+广播 widget 与页面销毁竞态；笔记页返回时自己 LaunchedEffect 刷新）
         pending = PendingMessageTodoStore.list(context)
         msgTodos = TodoStore.list(context)
-        vm.refresh()
     }
-    androidx.compose.runtime.LaunchedEffect(Unit) {
-        vm.refresh()
-        reload()
-    }
+    androidx.compose.runtime.LaunchedEffect(Unit) { reload() }
 
     fun confirm(p: PendingMessageTodo) {
         try {
@@ -167,7 +165,7 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
             if (pending.isNotEmpty()) {
                 item(key = "sec_pending") {
                     Text(
-                        "📬 消息待办 · 待确认 ${pending.size}",
+                        "消息待办 · 待确认 ${pending.size}",
                         fontWeight = FontWeight.ExtraBold, color = Color(0xFF374151), fontSize = 14.sp,
                         modifier = Modifier.padding(top = 10.dp, bottom = 2.dp)
                     )
@@ -196,31 +194,37 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
                                 maxLines = 1, overflow = TextOverflow.Ellipsis
                             )
                             Spacer(Modifier.height(6.dp))
-                            Row {
-                                Box(
-                                    contentAlignment = Alignment.Center,
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                // 2026-09-15 路河拍板：待确认只给“已完成”（一步办掉，省一次点击）和“不要”；
+                                // “收下再勾选”两步合并；“跳微信”只到 App 首页不到会话，无用，移除。
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier
-                                        .size(26.dp)
-                                        .background(LuyuanColors.Green700, CircleShape)
-                                        .clickable { confirm(p) }
-                                ) { Icon(Icons.Default.Check, "收下", tint = Color.White, modifier = Modifier.size(15.dp)) }
-                                Spacer(Modifier.width(8.dp))
-                                Box(
-                                    contentAlignment = Alignment.Center,
-                                    modifier = Modifier
-                                        .size(26.dp)
-                                        .border(1.dp, LuyuanColors.Ink4, CircleShape)
-                                        .clickable { discard(p) }
-                                ) { Icon(Icons.Default.Close, "不要", tint = LuyuanColors.Ink3, modifier = Modifier.size(14.dp)) }
+                                        .background(LuyuanColors.Green700, RoundedCornerShape(999.dp))
+                                        .clickable {
+                                            try {
+                                                val done = TodoStore.fromPending(p).copy(
+                                                    done = true, done_at = PendingMessageTodoStore.nowIso()
+                                                )
+                                                TodoStore.write(context, done)
+                                            } catch (_: Exception) { }
+                                            PendingMessageTodoStore.remove(context, p.id)
+                                            reload()
+                                        }
+                                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("已完成", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.SemiBold)
+                                }
                                 Spacer(Modifier.width(8.dp))
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier
-                                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(999.dp))
-                                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(999.dp))
-                                        .clickable { openWechat(context) }
-                                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                                ) { Text("💬 微信", fontSize = 11.sp, color = LuyuanColors.Ink2) }
+                                        .border(1.dp, LuyuanColors.Ink4, RoundedCornerShape(999.dp))
+                                        .clickable { discard(p) }
+                                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                                ) { Text("不要", fontSize = 12.sp, color = LuyuanColors.Ink3) }
                             }
                         }
                     }
@@ -229,7 +233,7 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
             // ---------- ② 未办（按截止时间升序） ----------
             item(key = "sec_open") {
                 Text(
-                    "📋 未办 ${rows.size} 件 · 按截止时间排序",
+                    "未办 ${rows.size} 件 · 按截止时间排序",
                     fontWeight = FontWeight.ExtraBold, color = Color(0xFF374151), fontSize = 14.sp,
                     modifier = Modifier.padding(top = 10.dp, bottom = 2.dp)
                 )
@@ -249,11 +253,21 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
                             .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
                             .padding(horizontal = 12.dp, vertical = 10.dp)
                     ) {
+                        // 2026-09-15 路河：待办直接勾选完成（消息待办本地切换；联系人待办走 vm 管线）
                         Box(
+                            contentAlignment = Alignment.Center,
                             modifier = Modifier
-                                .size(19.dp)
-                                .border(1.6.dp, LuyuanColors.Ink4, CircleShape)
-                        )
+                                .size(22.dp)
+                                .border(1.6.dp, LuyuanColors.Green700, CircleShape)
+                                .clickable {
+                                    if (r.key.startsWith("msg_")) {
+                                        msgTodos.find { "msg_" + it.id == r.key }?.let { toggleMsg(it) }
+                                    } else {
+                                        val parts = r.key.removePrefix("ct_").split("_", limit = 2)
+                                        if (parts.size == 2) { vm.toggleContactTodo(parts[0], parts[1]); reload() }
+                                    }
+                                }
+                        ) { Icon(Icons.Default.Check, "完成", tint = LuyuanColors.Green700, modifier = Modifier.size(13.dp)) }
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
                             Text(

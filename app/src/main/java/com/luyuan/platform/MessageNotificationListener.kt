@@ -59,19 +59,18 @@ class MessageNotificationListener : NotificationListenerService() {
             worker.execute {
                 try {
                     val r = MessageTodoExtractor.extract(this, title, body, source) ?: return@execute
-                    PendingMessageTodoStore.add(
-                        this,
-                        PendingMessageTodo(
-                            id = PendingMessageTodoStore.newId(),
-                            text = r.text,
-                            who = r.who,
-                            whenText = r.whenText,
-                            raw = body.take(200),
-                            source = source,
-                            sender = title,
-                            created_at = PendingMessageTodoStore.nowIso()
-                        )
+                    val todo = PendingMessageTodo(
+                        id = PendingMessageTodoStore.newId(),
+                        text = r.text,
+                        who = r.who,
+                        whenText = r.whenText,
+                        raw = body.take(200),
+                        source = source,
+                        sender = title,
+                        created_at = PendingMessageTodoStore.nowIso()
                     )
+                    PendingMessageTodoStore.add(this, todo)
+                    notifyTodoAction(this, todo)   // 2026-09-15：通知栏直接已完成/不要
                 } catch (_: Throwable) {
                 }
             }
@@ -95,6 +94,40 @@ class MessageNotificationListener : NotificationListenerService() {
         if (last != null && now - last < 60_000) return true
         recent[key] = now
         return false
+    }
+
+    /** 抽中消息待办后发一条带「已完成/不要」的通知（路河 09-15） */
+    private fun notifyTodoAction(ctx: android.content.Context, p: com.luyuan.data.PendingMessageTodo) {
+        try {
+            val nm = ctx.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            val tap = android.app.PendingIntent.getActivity(
+                ctx, 0,
+                ctx.packageManager.getLaunchIntentForPackage(ctx.packageName),
+                android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            fun pi(action: String, requestCode: Int) = android.app.PendingIntent.getBroadcast(
+                ctx, requestCode,
+                android.content.Intent(action).setPackage(ctx.packageName)
+                    .putExtra(TodoActionReceiver.EXTRA_ID, p.id)
+                    .setClass(ctx, TodoActionReceiver::class.java),
+                android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            val who = if (p.who.isNotBlank()) p.who else if (p.sender.isNotBlank()) p.sender else "消息"
+            val builder = if (android.os.Build.VERSION.SDK_INT >= 26)
+                android.app.Notification.Builder(ctx, Reminders.CHANNEL_TODO)
+            else
+                @Suppress("DEPRECATION") android.app.Notification.Builder(ctx)
+            builder.setSmallIcon(android.R.drawable.checkbox_on_background)
+                .setContentTitle("$who：${p.text.take(30)}")
+                .setContentText(if (p.whenText.isNotBlank()) p.whenText else "消息里提到的待办")
+                .setAutoCancel(true)
+                .setContentIntent(tap)
+                .addAction(android.R.drawable.checkbox_on_background, "已完成", pi(TodoActionReceiver.ACTION_DONE, p.id.hashCode() * 10 + 1))
+                .addAction(android.R.drawable.ic_menu_close_clear_cancel, "不要", pi(TodoActionReceiver.ACTION_DROP, p.id.hashCode() * 10 + 2))
+            nm.notify(TodoActionReceiver.TAG, p.id.hashCode(), builder.build())
+        } catch (_: Throwable) {
+            // 发通知失败不影响入库
+        }
     }
 
     override fun onDestroy() {

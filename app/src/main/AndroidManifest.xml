@@ -91,6 +91,14 @@
             </intent-filter>
         </service>
 
+        <receiver
+            android:name=".platform.TodoActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.luyuan.action.TODO_DONE" />
+                <action android:name="com.luyuan.action.TODO_DROP" />
+            </intent-filter>
+        </receiver>
         <!-- 消息待办：监听微信/QQ 聊天通知 → 粗筛 → 云端抽取 → 待确认（默认关闭，开关在设置页） -->
         <service
             android:name=".platform.MessageNotificationListener"

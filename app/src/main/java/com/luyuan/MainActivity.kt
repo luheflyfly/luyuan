@@ -259,6 +259,11 @@ fun AppRoot(startDest: String) {
         }
     }
 
+    // 2026-09-15 路河：底栏可自定义（记账/课程/人脉可关，笔记/日记固定）
+    val context0 = androidx.compose.ui.platform.LocalContext.current
+    var navPrefsVersion by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    val visibleSlots = androidx.compose.runtime.remember(navPrefsVersion) { com.luyuan.data.BottomNavPrefs.visibleSlots(context0) }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         // edge-to-edge 配套：外壳不管状态栏/导航栏 insets——各屏自己的 Scaffold/TopAppBar
@@ -268,13 +273,15 @@ fun AppRoot(startDest: String) {
         bottomBar = {
             if (currentRoute == "home") {
                 NavigationBar(containerColor = MaterialTheme.colorScheme.background) {
-                    val tabs = listOf(
+                    val tabsAll = listOf(
                         Triple(0, "笔记", Icons.AutoMirrored.Filled.Notes),
                         Triple(1, "记账", Icons.Default.Payments),
                         Triple(2, "课程", Icons.Default.CalendarMonth),
                         Triple(3, "日记", Icons.Default.EditNote),
                         Triple(4, "人脉", Icons.Default.People)
                     )
+                    // 被用户从底栏移除的页不显示按钮（页面本身仍可从待办/深链/左缘进入）
+                    val tabs = tabsAll.filter { it.first in visibleSlots }
                     for ((page, label, icon) in tabs) {
                     NavigationBarItem(
                         selected = pagerState.currentPage == page,
@@ -340,22 +347,23 @@ fun AppRoot(startDest: String) {
                                 onTrash = { nav.navigate("trash") },
                                 onTodos = { nav.navigate("todos") } // 顶栏📋 → 独立待办页（IA 重排：笔记页不再放待办卡/回顾/设置）
                             )
-                            1 -> LedgerScreen(
+                            1 -> if (com.luyuan.data.BottomNavPrefs.showLedger(context0)) LedgerScreen(
                                 vm = vm,
                                 onAsk = { nav.navigate("ask") },
                                 onTrash = { nav.navigate("trash") }
-                            )
-                            2 -> CourseScreen(
+                            ) else HiddenTabHint("记账") { navPrefsVersion++ }
+                            2 -> if (com.luyuan.data.BottomNavPrefs.showCourse(context0)) CourseScreen(
                                 vm = vm,
                                 onAsk = { nav.navigate("ask") },
                                 onTrash = { nav.navigate("trash") },
                                 onDetail = { nav.navigate("detail/$it") } // B5：作业清单点进笔记详情
-                            )
+                            ) else HiddenTabHint("课程") { navPrefsVersion++ }
                             3 -> JournalScreen(vm = vm, onRecord = {
                                 vm.startWavRecording()
                                 nav.navigate("record") { launchSingleTop = true }
                             }, onReview = { nav.navigate("review") }) // 📊本周回顾迁来日记页（IA 重排）
-                            else -> PeopleScreen(vm = vm, onNoteClick = { nav.navigate("detail/$it") })
+                            else -> if (com.luyuan.data.BottomNavPrefs.showPeople(context0)) PeopleScreen(vm = vm, onNoteClick = { nav.navigate("detail/$it") })
+                            else HiddenTabHint("人脉") { navPrefsVersion++ }
                         }
                     }
                 }
@@ -578,7 +586,7 @@ fun AppRoot(startDest: String) {
                     modifier = Modifier
                         .align(Alignment.CenterStart)
                         .fillMaxHeight()
-                        .width(16.dp)
+                        .width(28.dp)
                         .zIndex(5f)
                         .edgeGestureStrip(
                             onRight = { showAsk = true },
@@ -588,19 +596,6 @@ fun AppRoot(startDest: String) {
                                 }
                             }
                         )
-                )
-            }
-            // 左缘竖排小提示（left-ia 稿 hint-l）：只在主页笔记页、无抽屉时显示
-            if (currentRoute == "home" && pagerState.currentPage == 0 && !showAsk && !showSettings && !multiSelect) {
-                Text(
-                    "‹ 左边缘右滑",
-                    fontSize = 9.sp,
-                    letterSpacing = 2.sp,
-                    color = LuyuanColors.Ink4.copy(alpha = 0.75f),
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .padding(start = 22.dp)
-                        .graphicsLayer { rotationZ = -90f }
                 )
             }
         }
@@ -712,3 +707,21 @@ private fun Modifier.edgeGestureStrip(onRight: () -> Unit, onLeft: () -> Unit = 
                 }
             }
         }
+
+
+/** 被用户从底栏移除的页：占位引导（2026-09-15 底栏自定义） */
+@androidx.compose.runtime.Composable
+private fun HiddenTabHint(name: String, onReAdd: () -> Unit) {
+    androidx.compose.foundation.layout.Box(
+        modifier = androidx.compose.ui.Modifier
+            .fillMaxSize()
+            .then(androidx.compose.foundation.clickable(onClick = onReAdd)),
+        contentAlignment = androidx.compose.ui.Alignment.Center
+    ) {
+        androidx.compose.material3.Text(
+            "「$name」已从底栏移除。点这里恢复，或去「设置 → 底栏自定义」调整。",
+            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 13.sp
+        )
+    }
+}
