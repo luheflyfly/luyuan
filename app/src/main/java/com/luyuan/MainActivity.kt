@@ -156,7 +156,8 @@ fun AppRoot(startDest: String) {
     val backStackEntry by nav.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val scope = rememberCoroutineScope()
-    val pagerState = rememberPagerState(initialPage = 0) { 5 }
+    // vc79：6 页（0笔记 1记账 2课程 3日记 4人脉 5待办）——待办升底栏一级页
+    val pagerState = rememberPagerState(initialPage = 0) { 6 }
     val navInteraction = remember { MutableInteractionSource() }
     val navScale = rememberPressScale(navInteraction)
     var searchMode by remember { mutableStateOf(false) }
@@ -599,7 +600,7 @@ fun AppRoot(startDest: String) {
                         .edgeGestureStrip(
                             onRight = { showAsk = true },
                             onLeft = {
-                                if (pagerState.currentPage < 4) {
+                                if (pagerState.currentPage < 5) {
                                     scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
                                 }
                             }
