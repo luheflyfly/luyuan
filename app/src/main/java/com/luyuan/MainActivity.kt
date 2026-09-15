@@ -337,10 +337,8 @@ fun AppRoot(startDest: String) {
                                     nav.navigate("record") { launchSingleTop = true }
                                 },
                                 onDetail = { id -> nav.navigate("detail/$id") },
-                                onSettings = { showSettings = true }, // 顶栏⚙ → 左侧抽屉第二层（left-ia）
                                 onTrash = { nav.navigate("trash") },
-                                onReview = { nav.navigate("review") }, // 顶栏📊 → 本周回顾（只读）
-                                onTodos = { nav.navigate("todos") } // 顶栏📋 → 独立待办页（按截止排序）
+                                onTodos = { nav.navigate("todos") } // 顶栏📋 → 独立待办页（IA 重排：笔记页不再放待办卡/回顾/设置）
                             )
                             1 -> LedgerScreen(
                                 vm = vm,
@@ -356,7 +354,7 @@ fun AppRoot(startDest: String) {
                             3 -> JournalScreen(vm = vm, onRecord = {
                                 vm.startWavRecording()
                                 nav.navigate("record") { launchSingleTop = true }
-                            })
+                            }, onReview = { nav.navigate("review") }) // 📊本周回顾迁来日记页（IA 重排）
                             else -> PeopleScreen(vm = vm, onNoteClick = { nav.navigate("detail/$it") })
                         }
                     }

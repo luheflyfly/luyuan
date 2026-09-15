@@ -49,6 +49,8 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -290,9 +292,7 @@ fun NoteListScreen(
     vm: LuyuanViewModel,
     onRecord: () -> Unit,
     onDetail: (String) -> Unit,
-    onSettings: () -> Unit,
     onTrash: () -> Unit,
-    onReview: () -> Unit = {},
     onTodos: () -> Unit = {}
 ) {
     val notes by vm.notes.collectAsStateWithLifecycle()
@@ -313,30 +313,12 @@ fun NoteListScreen(
     val scope = rememberCoroutineScope()
     val keyboard = LocalSoftwareKeyboardController.current
 
-    // 消息待办 · 待确认（立项单 T3）：备用机监听到的消息经云端抽取后先落这里，
-    // 用户点 ✓ 才写成正式 todo_<id>.json 同步回电脑；✗ 直接丢。
-    var pendingTodos by remember { mutableStateOf(com.luyuan.data.PendingMessageTodoStore.list(context)) }
-
-    fun confirmPendingTodo(p: com.luyuan.data.PendingMessageTodo) {
-        try {
-            val t = com.luyuan.data.TodoStore.fromPending(p)
-            com.luyuan.data.TodoStore.write(context, t)
-        } catch (_: Exception) {
-        }
-        com.luyuan.data.PendingMessageTodoStore.remove(context, p.id)
-        pendingTodos = com.luyuan.data.PendingMessageTodoStore.list(context)
-        vm.refresh()
-    }
-
-    fun discardPendingTodo(p: com.luyuan.data.PendingMessageTodo) {
-        com.luyuan.data.PendingMessageTodoStore.remove(context, p.id)
-        pendingTodos = com.luyuan.data.PendingMessageTodoStore.list(context)
-    }
-
-    // 每次回到列表都重新读盘，授权后/同步后立刻可见
+    // IA 重排（2026-09-15）：待办确认卡迁往独立「待办」页（顶栏📋，带数量红点），笔记页只管笔记。
+    // 每次回到列表都重新读盘；顺带刷新📋红点计数
+    var pendingTodoCount by remember { mutableStateOf(0) }
     LaunchedEffect(Unit) {
         vm.refresh()
-        pendingTodos = com.luyuan.data.PendingMessageTodoStore.list(context)
+        pendingTodoCount = com.luyuan.data.PendingMessageTodoStore.list(context).size
     }
 
     val filtered = remember(notes, query) {
@@ -434,17 +416,14 @@ fun NoteListScreen(
                         )
                     }
                     IconButton(onClick = onTodos) {
-                        Icon(Icons.Default.TaskAlt, contentDescription = "待办")
-                    }
-                    IconButton(onClick = onReview) {
-                        Icon(Icons.Default.BarChart, contentDescription = "本周回顾")
+                        BadgedBox(badge = {
+                            if (pendingTodoCount > 0) Badge { Text("$pendingTodoCount") }
+                        }) { Icon(Icons.Default.TaskAlt, contentDescription = "待办") }
                     }
                     IconButton(onClick = onTrash) {
                         Icon(Icons.Default.DeleteOutline, contentDescription = "回收站")
                     }
-                    IconButton(onClick = onSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "设置")
-                    }
+
                 }
             )
         }
@@ -558,16 +537,6 @@ fun NoteListScreen(
                         .padding(horizontal = 12.dp)
                         .padding(top = 4.dp)
                 ) {
-                    // 消息待办 · 待确认（置顶：需要用户裁决，别让它在列表里被淹没）
-                    if (pendingTodos.isNotEmpty()) {
-                        item(key = "pending_todos_${pendingTodos.size}") {
-                            PendingTodoSection(
-                                items = pendingTodos,
-                                onConfirm = { confirmPendingTodo(it) },
-                                onDiscard = { discardPendingTodo(it) }
-                            )
-                        }
-                    }
                     for (g in groups) {
                         item(key = "h_${g.label}_${g.notes.size}") {
                             // 多选态：点日期分组头 = 选/不选这一整天（稿 multiselect.html「按日期全选」）

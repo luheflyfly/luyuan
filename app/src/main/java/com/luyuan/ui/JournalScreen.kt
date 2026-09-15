@@ -28,6 +28,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddAPhoto
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Mic
@@ -46,6 +47,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
@@ -114,7 +116,7 @@ internal fun firstEmoji(s: String): String? {
 /** 负一屏 · 日记：一天一篇（tags=["日记"]，与 PC 端统一），键盘/语音/表情/配图 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun JournalScreen(vm: LuyuanViewModel, onRecord: () -> Unit) {
+fun JournalScreen(vm: LuyuanViewModel, onRecord: () -> Unit, onReview: () -> Unit = {}) {
     val todayDiary by vm.todayDiary.collectAsStateWithLifecycle()
     val diaries by vm.diaries.collectAsStateWithLifecycle()
     val enabled by vm.journalEnabled.collectAsStateWithLifecycle()
@@ -192,6 +194,9 @@ fun JournalScreen(vm: LuyuanViewModel, onRecord: () -> Unit) {
                     }
                 },
                 actions = {
+                    IconButton(onClick = onReview) {
+                        Icon(Icons.Default.BarChart, contentDescription = "本周回顾")
+                    }
                     Text(
                         "只写今天这篇",
                         fontSize = 10.sp,
