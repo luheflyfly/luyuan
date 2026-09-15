@@ -7,7 +7,6 @@ import com.luyuan.data.MessageSettings
 import com.luyuan.data.MessageTodoExtractor
 import com.luyuan.data.PendingMessageTodo
 import com.luyuan.data.PendingMessageTodoStore
-import com.luyuan.platform.CHANNEL_TODO
 import java.util.concurrent.Executors
 
 /**
@@ -115,7 +114,7 @@ class MessageNotificationListener : NotificationListenerService() {
             )
             val who = if (p.who.isNotBlank()) p.who else if (p.sender.isNotBlank()) p.sender else "消息"
             val builder = if (android.os.Build.VERSION.SDK_INT >= 26)
-                android.app.Notification.Builder(ctx, CHANNEL_TODO)
+                android.app.Notification.Builder(ctx, Reminders.CHANNEL_TODO)
             else
                 @Suppress("DEPRECATION") android.app.Notification.Builder(ctx)
             builder.setSmallIcon(android.R.drawable.checkbox_on_background)
