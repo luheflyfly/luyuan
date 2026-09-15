@@ -715,7 +715,7 @@ private fun HiddenTabHint(name: String, onReAdd: () -> Unit) {
     androidx.compose.foundation.layout.Box(
         modifier = androidx.compose.ui.Modifier
             .fillMaxSize()
-            .then(androidx.compose.foundation.clickable(onClick = onReAdd)),
+            .clickable(onClick = onReAdd),
         contentAlignment = androidx.compose.ui.Alignment.Center
     ) {
         androidx.compose.material3.Text(
