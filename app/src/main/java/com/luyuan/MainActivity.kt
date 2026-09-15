@@ -25,7 +25,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.systemGestureExclusion
@@ -184,6 +184,29 @@ fun AppRoot(startDest: String) {
     var inputText by remember { mutableStateOf(draftPrefs.getString("terminal_draft", "") ?: "") }
     // 胶囊在根 Box 坐标系里的矩形（用于「点空白收起」判定落点，避免抢胶囊的点击/焦点）
     var capsuleRect by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
+
+    // 键盘高度实测兜底（vc77 · 09-15 夜）：这台 vivo 三次实证 WindowInsets.ime 不可信——
+    // vc57 恒 0；09-13 开 edge-to-edge 后真机仍 0（「打字不显示只能看到空白」＝展开输入框
+    // 整个被键盘盖住，字打得进去但看不见）。GlobalLayout 可视帧测量不依赖任何 insets API，
+    // 全 ROM 一致：root 底边 − 可视帧底边 > 1/4 屏高 ⇒ 键盘开着，差值即键盘高；
+    // 阈值挡掉手势导航栏（其高度远小于 1/4 屏）误判。
+    val rootView = androidx.compose.ui.platform.LocalView.current
+    var measuredImePx by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    androidx.compose.runtime.DisposableEffect(rootView) {
+        val rect = android.graphics.Rect()
+        val listener = android.view.ViewTreeObserver.OnGlobalLayoutListener {
+            rootView.getWindowVisibleDisplayFrame(rect)
+            val h = rootView.height - rect.bottom
+            measuredImePx = if (h > rootView.height / 4) h else 0
+        }
+        rootView.viewTreeObserver.addOnGlobalLayoutListener(listener)
+        onDispose { rootView.viewTreeObserver.removeOnGlobalLayoutListener(listener) }
+    }
+    // 键盘抬升单源取 max：insets 可信的机型＝ime insets（等价原 imePadding 行为）；
+    // insets 恒 0 的 vivo＝实测兜底。只走一份 padding，两种来源绝不叠加。
+    val kbBottomPad = with(androidx.compose.ui.platform.LocalDensity.current) {
+        maxOf(WindowInsets.ime.getBottom(this), measuredImePx).toDp()
+    }
 
     // 首启引导（v2/onboarding.html 施工）：只在首次启动出现；完成=落笔记页+胶囊展开（深链 auto=note 同款）
     val onboardPrefs = remember { ctx.getSharedPreferences("luyuan_prefs", android.content.Context.MODE_PRIVATE) }
@@ -513,10 +536,9 @@ fun AppRoot(startDest: String) {
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .zIndex(3f)
-                        // 09-11 修「打字看不见」：vivo/OriginOS 上 windowSoftInputMode=adjustResize
-                        // 经常不生效（窗口不缩小），键盘直接盖住底部胶囊——字打得进去但看不见。
-                        // imePadding 基于 WindowInsets.ime，不依赖窗口 resize，键盘弹出时胶囊自动上移。
-                        .imePadding()
+                        // vc77：.imePadding() 改为 max(ime insets, 实测键盘高) 单源 padding——
+                        // vivo 上 insets 恒 0 时由实测值抬升，输入框不再藏进键盘后（09-11/09-13 两轮老路已证不可信）
+                        .padding(bottom = kbBottomPad)
                         .padding(horizontal = 12.dp, vertical = 10.dp)
                         .onGloballyPositioned { coords ->
                             val b = coords.boundsInParent()
