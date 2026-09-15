@@ -12,8 +12,8 @@ android {
         applicationId = "com.luyuan"
         minSdk = 24
         targetSdk = 34
-        versionCode = 82
-        versionName = "1.24.3"
+        versionCode = 83
+        versionName = "1.25.0"
         // 离线识别（sherpa-onnx）jniLib 只带 arm64（用户真机为 arm64，控制 APK 体积）
         ndk {
             abiFilters += "arm64-v8a"

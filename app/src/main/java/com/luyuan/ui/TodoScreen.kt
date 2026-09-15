@@ -147,7 +147,8 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
                 Row(
                     key = "msg_${t.id}", text = t.text, who = t.who.ifBlank { t.sender },
                     score = deadlineScore(t.when_text, "", t.created_at, now),
-                    dueLabel = dueLabel("", t.when_text, now), origin = "消息",
+                    dueLabel = dueLabel("", t.when_text, now),
+                    origin = if (t.device == "pc") "电脑" else "消息", // PC msgdigest 同步件标注
                     msgItem = t
                 )
             )
@@ -214,10 +215,37 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
                 )
             }
             if (rows.isEmpty()) {
-                item {
+                item(key = "empty_hint") {
                     Text(
                         "还没有未办的待办。微信/QQ 消息里的事会自动出现在这里（可点「收下」或直接勾掉）。",
                         fontSize = 12.sp, color = LuyuanColors.Ink4
+                    )
+                }
+                // 09-16 凌晨自提案（自审批）：路河「没消息来没法验证」——空态一键塞示例，
+                // 示例可勾掉/✕丢弃，永不误伤真数据（sender=示例）
+                item(key = "empty_sample") {
+                    Text(
+                        "＋ 塞一条示例试试",
+                        fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = LuyuanColors.Green700,
+                        modifier = Modifier
+                            .background(LuyuanColors.Green50, RoundedCornerShape(999.dp))
+                            .clickable {
+                                PendingMessageTodoStore.add(
+                                    context,
+                                    PendingMessageTodo(
+                                        id = PendingMessageTodoStore.newId(),
+                                        text = "明天下午三点前把班会记录发给辅导员",
+                                        who = "辅导员",
+                                        whenText = "明天下午三点",
+                                        raw = "（示例）记得把周一班会记录整理好发我，明天下午三点前。",
+                                        source = "wechat",
+                                        sender = "示例",
+                                        created_at = PendingMessageTodoStore.nowIso()
+                                    )
+                                )
+                                reload()
+                            }
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
                     )
                 }
             }
