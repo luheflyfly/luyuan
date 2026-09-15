@@ -135,11 +135,10 @@ class TodayWidgetProvider : AppWidgetProvider() {
     }
 
     private fun render(context: Context, manager: AppWidgetManager, appWidgetId: Int) {
-        // ⚠️ 2026-09-10 v2：向手机 UI 视觉稿 ui-mobile/widget/index.html W1 对齐
-        //    （v1 扁平两行 → v1.19.3 扁平全量 → 本版 v2 按视觉稿重建：叶子 logo / 左侧三行+右侧大号倒计时 /
-        //     两个带圆底图标的统计卡 + 竖分隔线 / 按钮内嵌图标）
-        //    vivo 红线照守：只用 LinearLayout/TextView/ImageView、嵌套≤3、无裸 View、属性基础集
-        val views = RemoteViews(context.packageName, R.layout.widget_today_v2)
+        // ⚠️ 2026-09-15 v3：重绘治「字体样式大小和图标不协调」（vc78）。字阶收敛四级 10/13/16/24，
+        //    图标统一 26dp 圆角方底+14dp 线条 glyph，卡底改纸白 token #FAF7F0。
+        //    vivo 红线照守：只用 LinearLayout/TextView/ImageView、嵌套深度与 v2 一致（真机已证可渲染）
+        val views = RemoteViews(context.packageName, R.layout.widget_today_v3)
 
         // 数据逐项防御：任一仓库异常只丢该项数据，不拖垮整卡渲染
         val courses = try { V2EntityRepository.listCourses(context) } catch (_: Throwable) { emptyList() }

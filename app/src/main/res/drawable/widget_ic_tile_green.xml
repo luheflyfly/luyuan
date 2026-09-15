@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 今日卡 v3 统一图标底：26dp 圆角方、绿陶土色（与琥珀 clock tile 同规格） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#E3ECE6" />
+    <corners android:radius="8dp" />
+</shape>

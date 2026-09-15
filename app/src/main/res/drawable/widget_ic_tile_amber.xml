@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 今日卡 v3 统一图标底：26dp 圆角方、琥珀淡底（待办/时钟位） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#FEF3C7" />
+    <corners android:radius="8dp" />
+</shape>

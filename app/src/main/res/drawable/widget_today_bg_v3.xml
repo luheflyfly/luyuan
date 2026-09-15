@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 今日卡 v3 卡底：纸白 #FAF7F0（App token 家族，弃 v2 冷白半透明） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#FAF7F0" />
+    <corners android:radius="18dp" />
+</shape>
