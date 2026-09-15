@@ -19,8 +19,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.BottomNavigation
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Lock
@@ -330,7 +330,7 @@ fun SettingsScreen(vm: LuyuanViewModel, onBack: () -> Unit, onAsk: () -> Unit = 
             }
 
             // ---------- 🧭 底栏自定义（2026-09-15 路河拍板：子界面可自由放底栏） ----------
-            SectionCard("底栏自定义", Icons.Default.BottomNavigation) {
+            SectionCard("底栏自定义", Icons.Default.Apps) {
                 Text(
                     "笔记、日记固定在底栏；下面三页可以自由收起，收起后仍能从待办页、左缘抽屉或深链进入。",
                     style = MaterialTheme.typography.labelSmall,
