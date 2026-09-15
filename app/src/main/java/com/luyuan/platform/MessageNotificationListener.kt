@@ -114,7 +114,7 @@ class MessageNotificationListener : NotificationListenerService() {
             )
             val who = if (p.who.isNotBlank()) p.who else if (p.sender.isNotBlank()) p.sender else "消息"
             val builder = if (android.os.Build.VERSION.SDK_INT >= 26)
-                android.app.Notification.Builder(ctx, Reminders.CHANNEL_TODO)
+                android.app.Notification.Builder(ctx, ReminderNotifications.CHANNEL_TODO)
             else
                 @Suppress("DEPRECATION") android.app.Notification.Builder(ctx)
             builder.setSmallIcon(android.R.drawable.checkbox_on_background)

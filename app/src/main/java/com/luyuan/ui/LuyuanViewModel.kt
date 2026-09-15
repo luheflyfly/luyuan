@@ -268,6 +268,39 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** 只重扫笔记/日记（写笔记类操作后调用，不碰联系人/账目/课程，避免无谓全量重扫） */
+    fun refreshNotes() {
+        suppressSelfTriggered {
+            _refreshing.value = true
+            viewModelScope.launch(Dispatchers.IO) {
+                _notes.value = NoteRepository.listNotes(ctx)
+                _todayDiary.value = NoteRepository.todayDiaryNote(ctx)
+                _diaries.value = NoteRepository.listDiaries(ctx)
+                _refreshing.value = false
+                _refreshDone.value += 1
+                // 通知桌面「今日卡」组件重算（组件无周期刷新，靠数据变动主动推）
+                try {
+                    ctx.sendBroadcast(
+                        Intent(ctx, TodayWidgetProvider::class.java).apply {
+                            action = TodayWidgetProvider.ACTION_REFRESH
+                        }
+                    )
+                } catch (_: Exception) {
+                }
+            }
+        }
+    }
+
+    /** 只重扫 v2 实体（账目/课程）——写记账/加课后调用 */
+    fun refreshV2() {
+        suppressSelfTriggered {
+            viewModelScope.launch(Dispatchers.IO) {
+                _expenses.value = V2EntityRepository.listExpenses(ctx)
+                _courses.value = V2EntityRepository.listCourses(ctx)
+            }
+        }
+    }
+
     fun toggleMood() {
         val next = !_moodEnabled.value
         moodPrefs.edit().putBoolean("mood_enabled", next).apply()
@@ -354,7 +387,7 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
         if (t.isBlank()) return
         viewModelScope.launch(Dispatchers.IO) {
             NoteRepository.createManual(ctx, t)
-            refresh()
+            refreshNotes()
         }
     }
 
@@ -364,7 +397,7 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             NoteRepository.saveDiary(ctx, t)
             _diaryEcho.value = _diaryEcho.value + 1
-            refresh()
+            refreshNotes()
         }
     }
 
@@ -374,21 +407,21 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             if (diary) NoteRepository.saveDiary(ctx, t) else NoteRepository.createManual(ctx, t)
             _savedMsg.value = t
-            refresh()
+            refreshNotes()
         }
     }
 
     fun updateNote(id: String, text: String, tags: List<String> = emptyList(), images: List<String>? = null) {
         viewModelScope.launch(Dispatchers.IO) {
             NoteRepository.updateNote(ctx, id, text = text, tags = tags, images = images)
-            refresh()
+            refreshNotes()
         }
     }
 
     fun deleteNote(id: String) {
         viewModelScope.launch(Dispatchers.IO) {
             NoteRepository.softDelete(ctx, id)
-            refresh()
+            refreshNotes()
         }
     }
 
@@ -397,7 +430,7 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
         if (ids.isEmpty()) return
         viewModelScope.launch(Dispatchers.IO) {
             for (id in ids) NoteRepository.softDelete(ctx, id)
-            refresh()
+            refreshNotes()
         }
     }
 
@@ -576,7 +609,7 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
             val rel = NoteRepository.importImage(ctx, uri) ?: return@launch
             val imgs = (_todayDiary.value?.images ?: emptyList()) + rel
             NoteRepository.setDiaryImages(ctx, imgs)
-            refresh()
+            refreshNotes()
         }
     }
 
@@ -585,7 +618,7 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             val imgs = (_todayDiary.value?.images ?: emptyList()) - rel
             NoteRepository.setDiaryImages(ctx, imgs)
-            refresh()
+            refreshNotes()
         }
     }
 
@@ -611,7 +644,7 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
                 val cur = _todayDiary.value?.images ?: emptyList()
                 if (rel !in cur) {
                     NoteRepository.setDiaryImages(ctx, cur + rel)
-                    refresh()
+                    refreshNotes()
                 }
                 _stickerMsg.value = ""
             } catch (e: Exception) {
@@ -688,7 +721,7 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
                 )
             )
             _savedMsg.value = "已录音，等电脑转写"
-            refresh()
+            refreshNotes()
         }
     }
 
@@ -772,7 +805,7 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
                 _voiceError.value = "离线识别没出文字，已改为录音待电脑转写"
             }
             _offlineBusy.value = false
-            refresh()
+            refreshNotes()
         }
     }
 
@@ -825,6 +858,6 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
         _savedMsg.value = text
-        refresh()
+        refreshNotes()
     }
 }

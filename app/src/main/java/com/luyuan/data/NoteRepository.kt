@@ -225,7 +225,10 @@ object NoteRepository {
     }
 
     fun getNote(context: Context, id: String): Note? {
-        return listNotes(context).firstOrNull { it.id == id }
+        // 精确读：直接按 id 定位文件，避免为取单条而全目录递归扫描（详情页进出不再全量重扫）
+        val root = StorageLocator.getRoot(context)
+        val file = findFileById(root, id, 0, 6) ?: return null
+        return readNote(file)
     }
 
     fun saveNote(context: Context, note: Note) {

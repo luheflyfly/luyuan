@@ -92,7 +92,7 @@ fun LedgerScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit) {
         }
         PendingExpenseStore.remove(ctx, p.id)
         pending = PendingExpenseStore.list(ctx)
-        vm.refresh()
+        vm.refreshV2()
     }
 
     fun discardPending(p: PendingExpense) {

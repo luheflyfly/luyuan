@@ -130,7 +130,6 @@ fun JournalScreen(vm: LuyuanViewModel, onRecord: () -> Unit, onReview: () -> Uni
     var diaryValue by remember { mutableStateOf(TextFieldValue("")) }
     var dirty by remember { mutableStateOf(false) }
     var savedAt by remember { mutableStateOf("") }
-    LaunchedEffect(Unit) { vm.refresh() }
     LaunchedEffect(todayDiary) {
         if (!dirty) diaryValue = TextFieldValue(todayDiary?.text ?: "")
     }

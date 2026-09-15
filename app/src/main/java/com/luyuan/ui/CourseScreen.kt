@@ -582,7 +582,7 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                     V2EntityRepository.saveCourse(
                         context, name, teacher, place, slot.weekday, slot.start, slot.end, weeks
                     )
-                    vm.refresh()
+                    vm.refreshV2()
                     addSlot = null
                     Toast.makeText(context, "已加课：周" + dayShort(slot.weekday) + " " + slot.start + " " + name, Toast.LENGTH_SHORT).show()
                 } catch (e: Exception) {

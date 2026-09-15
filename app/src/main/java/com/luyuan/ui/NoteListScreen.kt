@@ -317,7 +317,7 @@ fun NoteListScreen(
     // 每次回到列表都重新读盘；顺带刷新📋红点计数
     var pendingTodoCount by remember { mutableStateOf(0) }
     LaunchedEffect(Unit) {
-        vm.refresh()
+        // 数据已在 ViewModel.init 拉过一次 + FileObserver 增量更新，进页不再全量重扫（防并发卡顿）
         pendingTodoCount = com.luyuan.data.PendingMessageTodoStore.list(context).size
     }
 

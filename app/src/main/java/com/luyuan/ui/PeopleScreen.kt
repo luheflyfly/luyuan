@@ -135,7 +135,6 @@ fun PeopleScreen(vm: LuyuanViewModel, onNoteClick: (String) -> Unit = {}) {
     var bySid by remember { mutableStateOf(true) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    LaunchedEffect(Unit) { vm.refresh() }
 
     val filtered = remember(contacts, query) {
         if (query.isBlank()) contacts
