@@ -157,8 +157,26 @@ fun AppRoot(startDest: String) {
     val backStackEntry by nav.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val scope = rememberCoroutineScope()
-    // vc79：6 页（0笔记 1记账 2课程 3日记 4人脉 5待办）——待办升底栏一级页
-    val pagerState = rememberPagerState(initialPage = 0) { 6 }
+    // vc87 底栏与翻页统一（路河 09-16「右滑直接变第四个 / 滑到已移除的人脉页，累赘」）：
+    // 底栏显示顺序 = 翻页顺序；被移除的页不进翻页队列。此前 pager=历史槽位序 0-5、底栏=显示序，
+    // 所以从笔记右滑落在视觉第四个「记账」，且隐藏页还能被滑到弹出占位提示。
+    val context0 = androidx.compose.ui.platform.LocalContext.current
+    // currentRoute 变化（设置返回）也重读底栏偏好——顺手修「设置里关了页、回底栏不变」的隐患
+    val visibleSlots = androidx.compose.runtime.remember(currentRoute) {
+        com.luyuan.data.BottomNavPrefs.visibleSlots(context0)
+    }
+    val tabs = listOf(
+        Triple(0, "笔记", Icons.AutoMirrored.Filled.Notes),
+        Triple(5, "待办", Icons.Default.TaskAlt),
+        Triple(3, "日记", Icons.Default.EditNote),
+        Triple(1, "记账", Icons.Default.Payments),
+        Triple(2, "学业", Icons.Default.School),
+        Triple(4, "人脉", Icons.Default.People)
+    ).filter { it.first in visibleSlots }
+    // pageCount 走状态而不是直接捕列表：底栏偏好变化导致页数增减时 Pager 实时取新值
+    val pagerPageCount = androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(tabs.size) }
+    pagerPageCount.intValue = tabs.size
+    val pagerState = rememberPagerState(initialPage = 0) { pagerPageCount.intValue }
     val navInteraction = remember { MutableInteractionSource() }
     val navScale = rememberPressScale(navInteraction)
     var searchMode by remember { mutableStateOf(false) }
@@ -269,8 +287,8 @@ fun AppRoot(startDest: String) {
                 expanded = true
             }
             startDest.startsWith("tab:") -> {
-                // 桌面组件今日卡：跳到底栏对应页
-                val idx = when (startDest.removePrefix("tab:")) {
+                // 桌面组件今日卡：跳到底栏对应页（vc87：页名→历史槽位→底栏可见序）
+                val slot = when (startDest.removePrefix("tab:")) {
                     "notes" -> 0
                     "ledger" -> 1
                     "course" -> 2
@@ -279,7 +297,7 @@ fun AppRoot(startDest: String) {
                     "todos" -> 5
                     else -> 0
                 }
-                pagerState.scrollToPage(idx)
+                pagerState.scrollToPage(tabs.indexOfFirst { it.first == slot }.takeIf { it >= 0 } ?: 0)
             }
             startDest.startsWith("detail:") -> {
                 // 桌面组件今日卡「最近」：进对应笔记详情
@@ -288,11 +306,6 @@ fun AppRoot(startDest: String) {
             }
         }
     }
-
-    // 2026-09-15 路河：底栏可自定义（记账/课程/人脉可关，笔记/日记固定）
-    val context0 = androidx.compose.ui.platform.LocalContext.current
-    var navPrefsVersion by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
-    val visibleSlots = androidx.compose.runtime.remember(navPrefsVersion) { com.luyuan.data.BottomNavPrefs.visibleSlots(context0) }
 
     // 待确认待办红点（vc79：挂底栏「待办」钮）：进页/切页即数 + 每 15s 兜底轮询（通知栏动作改动无广播）
     var pendingTodoCount by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
@@ -315,44 +328,35 @@ fun AppRoot(startDest: String) {
         bottomBar = {
             if (currentRoute == "home") {
                 NavigationBar(containerColor = MaterialTheme.colorScheme.background) {
-                    // vc79 IA 重排：固定核心=笔记/待办/日记，可开关=记账/课程/人脉，最右=设置齿轮（开抽屉非页面）
-                    val tabsAll = listOf(
-                        Triple(0, "笔记", Icons.AutoMirrored.Filled.Notes),
-                        Triple(5, "待办", Icons.Default.TaskAlt),
-                        Triple(3, "日记", Icons.Default.EditNote),
-                        Triple(1, "记账", Icons.Default.Payments),
-                        Triple(2, "学业", Icons.Default.School),
-                        Triple(4, "人脉", Icons.Default.People)
-                    )
-                    // 被用户从底栏移除的页不显示按钮（页面本身仍可从待办/深链/左缘进入）
-                    val tabs = tabsAll.filter { it.first in visibleSlots }
-                    for ((page, label, icon) in tabs) {
-                    NavigationBarItem(
-                        selected = pagerState.currentPage == page,
-                        onClick = {
-                            if (pagerState.currentPage != page) {
-                                // 09-11 修「点击底部标签掉帧」：animateScrollToPage 跨页滚动会
-                                // 逐页渲染中间页（笔记→人脉要滚过 3 页），每页现场组合 → 掉帧。
-                                // 改瞬移，只渲染目标页 1 页；滑动切页的动画不受影响。
-                                scope.launch { pagerState.scrollToPage(page) }
-                            }
-                        },
-                        icon = {
-                            if (page == 5) {
-                                // 待办红点：待确认消息待办条数（vc79 从笔记页顶栏迁来）
-                                androidx.compose.material3.BadgedBox(badge = {
-                                    if (pendingTodoCount > 0) {
-                                        androidx.compose.material3.Badge { Text("$pendingTodoCount") }
-                                    }
-                                }) { Icon(icon, contentDescription = label) }
-                            } else {
-                                Icon(icon, contentDescription = label)
-                            }
-                        },
-                        label = { Text(label) },
-                        interactionSource = navInteraction,
-                        modifier = Modifier.graphicsLayer { scaleX = navScale; scaleY = navScale }
-                    )
+                    // vc87：tabs=底栏可见页（显示顺序=翻页顺序，页数=队列长度）；最右齿轮=设置抽屉不占槽位
+                    for ((index, tab) in tabs.withIndex()) {
+                        val (slot, label, icon) = tab
+                        NavigationBarItem(
+                            selected = pagerState.currentPage == index,
+                            onClick = {
+                                if (pagerState.currentPage != index) {
+                                    // 09-11 修「点击底部标签掉帧」：animateScrollToPage 跨页滚动会
+                                    // 逐页渲染中间页（笔记→人脉要滚过 3 页），每页现场组装 → 掉帧。
+                                    // 改瞬移，只渲染目标页 1 页；滑动切页的动画不受影响。
+                                    scope.launch { pagerState.scrollToPage(index) }
+                                }
+                            },
+                            icon = {
+                                if (slot == 5) {
+                                    // 待办红点：待确认消息待办条数（vc79 从笔记页顶栏迁来）
+                                    androidx.compose.material3.BadgedBox(badge = {
+                                        if (pendingTodoCount > 0) {
+                                            androidx.compose.material3.Badge { Text("$pendingTodoCount") }
+                                        }
+                                    }) { Icon(icon, contentDescription = label) }
+                                } else {
+                                    Icon(icon, contentDescription = label)
+                                }
+                            },
+                            label = { Text(label) },
+                            interactionSource = navInteraction,
+                            modifier = Modifier.graphicsLayer { scaleX = navScale; scaleY = navScale }
+                        )
                     }
                     // 设置：底栏最右齿轮（vc79；开抽屉，不占页面槽位）
                     NavigationBarItem(
@@ -398,7 +402,9 @@ fun AppRoot(startDest: String) {
                         beyondBoundsPageCount = 4,
                         modifier = Modifier.fillMaxSize()
                     ) { page ->
-                        when (page) {
+                        // vc87：page=底栏可见序（与 tabs 一一对应）；隐藏页已不在队列，不再有占位提示
+                        val slot = tabs[page].first
+                        when (slot) {
                             0 -> NoteListScreen(
                                 vm = vm,
                                 onRecord = {
@@ -410,24 +416,23 @@ fun AppRoot(startDest: String) {
                                 // 09-15 夜 IA 重排：顶栏只留 心情/多选/回收站——待办升底栏一级页（slot 5），
                                 // 问路远进胶囊，设置进底栏齿轮（vc79 设计稿 D:\Luyuan\手机端UI大重绘_设计方案_2026-09-15夜.md）
                             )
-                            1 -> if (com.luyuan.data.BottomNavPrefs.showLedger(context0)) LedgerScreen(
+                            1 -> LedgerScreen(
                                 vm = vm,
                                 onAsk = { nav.navigate("ask") },
                                 onTrash = { nav.navigate("trash") }
-                            ) else HiddenTabHint("记账") { navPrefsVersion++ }
-                            2 -> if (com.luyuan.data.BottomNavPrefs.showCourse(context0)) CourseScreen(
+                            )
+                            2 -> CourseScreen(
                                 vm = vm,
                                 onAsk = { nav.navigate("ask") },
                                 onTrash = { nav.navigate("trash") },
                                 onDetail = { nav.navigate("detail/$it") } // B5：作业清单点进笔记详情
-                            ) else HiddenTabHint("学业") { navPrefsVersion++ }
+                            )
                             3 -> JournalScreen(vm = vm, onRecord = {
                                 vm.startWavRecording()
                                 nav.navigate("record") { launchSingleTop = true }
                             }, onReview = { nav.navigate("review") }) // 📊本周回顾迁来日记页（IA 重排）
                             5 -> TodoScreen(vm = vm, onBack = { nav.popBackStack() }, embedded = true) // 待办升底栏一级页（vc79）
-                            else -> if (com.luyuan.data.BottomNavPrefs.showPeople(context0)) PeopleScreen(vm = vm, onNoteClick = { nav.navigate("detail/$it") })
-                            else HiddenTabHint("人脉") { navPrefsVersion++ }
+                            else -> PeopleScreen(vm = vm, onNoteClick = { nav.navigate("detail/$it") })
                         }
                     }
                 }
@@ -718,21 +723,3 @@ private fun Modifier.edgeGestureStrip(onRight: () -> Unit, onLeft: () -> Unit = 
                 }
             }
         }
-
-
-/** 被用户从底栏移除的页：占位引导（2026-09-15 底栏自定义） */
-@androidx.compose.runtime.Composable
-private fun HiddenTabHint(name: String, onReAdd: () -> Unit) {
-    androidx.compose.foundation.layout.Box(
-        modifier = androidx.compose.ui.Modifier
-            .fillMaxSize()
-            .clickable(onClick = onReAdd),
-        contentAlignment = androidx.compose.ui.Alignment.Center
-    ) {
-        androidx.compose.material3.Text(
-            "「$name」已从底栏移除。点这里恢复，或去「设置 → 底栏自定义」调整。",
-            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 13.sp
-        )
-    }
-}
