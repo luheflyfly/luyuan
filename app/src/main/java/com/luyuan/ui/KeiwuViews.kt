@@ -408,11 +408,15 @@ fun LazyListScope.keiwuGradesItems(items: List<KeiwuGrade>) {
                             color = LuyuanColors.Ink1, maxLines = 1, overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            (g.grade_type.take(2)) + if (g.attempt != "first") " · " + when (g.attempt) {
+                            (when (g.grade_type) {
+                                "five" -> "五级制"
+                                "pass" -> "两级制"
+                                else -> "百分制"
+                            } + if (g.attempt != "first") " · " + when (g.attempt) {
                                 "resit" -> "补考"
                                 "retake" -> "重修"
                                 else -> ""
-                            } else "",
+                            } else ""),
                             fontSize = 10.sp, color = LuyuanColors.Ink3
                         )
                     }
