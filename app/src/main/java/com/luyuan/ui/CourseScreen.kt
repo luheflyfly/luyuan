@@ -74,10 +74,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 
 /**
- * 课程页 · 木案网格版（B5，2026-09-13 按.ui-mobile/v2/course-muan.html 施工）：
- * 下一节深绿卡（旧版保留）→ 周次切换条（◀ 第N周 ▶ / 本周 / 共N周，按 weeks 过滤）
- * → 节次×星期网格（分类色条课块、今天列金高亮、点空格子=加课）→ 图例筛选 → 周负荷柱图 → 课程作业清单。
- * 数据 = SYNC_FORMAT v2 kind:"course"；作业 = 打了课程名标签的笔记（§10.1 归课约定，不新增实体）。
+ * 学业页（vc85 改名，原「课程」）· 木案网格版（B5，2026-09-13 按.ui-mobile/v2/course-muan.html 施工）：
+ * 顶部分段=课表 / 校历 / 成绩 / 速查 四视图共用一页一滚动容器（hub 收敛，不加底栏签不加路由）。
+ * 课表：下一节深绿卡 → 周次切换条 → 节次×星期网格（点空格子=加课）→ 分类图例 → 负荷柱图 → 作业清单。
+ * 数据：课表 = SYNC_FORMAT v2 kind:"course"（PC 课务导出 course_k*.json 为准，vc85）；校历/成绩/速查 =
+ * KeiwuStore 打包件（PC 课务 keiwu_*.json）只读。作业 = 打了课程名标签的笔记（§10.1 归课约定）。
  */
 
 // 木案四分类（course-muan.html 图例口径）：颜色=稿面原值；按课名关键词确定性归类，不新增数据字段
@@ -99,6 +100,20 @@ internal fun courseCategory(name: String): String {
     }
 }
 
+/** vc85：有 PC 课务分类字段的课直接用其分类（十类口径），否则退回课名归类 */
+internal fun courseCategoryOf(c: Course): String =
+    if (c.category.isNotBlank()) c.category else courseCategory(c.name)
+
+/** vc85：优先 PC 课务导出的色值（"#1d4ed8"），坏值/旧文件退回四分类色 */
+internal fun courseColorOf(c: Course): Color =
+    if (c.color.length == 7 && c.color.startsWith("#")) {
+        try {
+            Color(0xFF000000L or c.color.removePrefix("#").toLong(16))
+        } catch (_: Exception) {
+            categoryColor(courseCategoryOf(c))
+        }
+    } else categoryColor(courseCategoryOf(c))
+
 internal fun categoryColor(cat: String): Color = when (cat) {
     CAT_MATH -> Color(0xFF4F8A73)   // 数学 · 深绿
     CAT_PUBLIC -> Color(0xFFB45309) // 公共 · 金
@@ -118,9 +133,17 @@ private data class AddSlot(val weekday: Int, val start: String, val end: String)
 fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, onDetail: (String) -> Unit = {}) {
     val courses by vm.courses.collectAsStateWithLifecycle()
     val notes by vm.notes.collectAsStateWithLifecycle()
+    val keiwuEvents by vm.keiwuEvents.collectAsStateWithLifecycle()
+    val keiwuGrades by vm.keiwuGrades.collectAsStateWithLifecycle()
+    val keiwuLedger by vm.keiwuLedger.collectAsStateWithLifecycle()
+    val keiwuRef by vm.keiwuRef.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("luyuan_prefs", Context.MODE_PRIVATE) }
     val today = remember { LocalDate.now() }
+
+    // vc85 hub：顶部分段切换 课表/校历/成绩/速查，四视图共用一页
+    var seg by remember { mutableStateOf(0) }
+    var csuSub by remember { mutableStateOf(0) }
 
     // 学期周次锚点：prefs 优先；默认=中南校历新生第一周周一 2026-09-14（domain/Semester.kt，2026 级口径）
     val start = remember(prefs) { semesterStart(today, prefs) }
@@ -138,6 +161,17 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
     val courseNames = remember(courses) {
         courses.map { it.name }.filter { it.isNotBlank() }.distinct().sorted().take(8)
     }
+    // vc85：PC 课务十类分类配色优先；旧数据（无 category 字段）走木案四分类
+    val catList: List<Pair<String, Color>> = if (courses.any { it.category.isNotBlank() })
+        courses.filter { it.category.isNotBlank() }
+            .map { it.category to courseColorOf(it) }
+            .distinctBy { it.first }
+    else listOf(
+        CAT_MATH to categoryColor(CAT_MATH),
+        CAT_MAJOR to categoryColor(CAT_MAJOR),
+        CAT_PUBLIC to categoryColor(CAT_PUBLIC),
+        CAT_PE to categoryColor(CAT_PE)
+    )
     val nowT = remember { LocalTime.now() }
 
     val totalWeeks = remember(courses) {
@@ -167,7 +201,7 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                 ),
                 title = {
                     Row(verticalAlignment = Alignment.Bottom) {
-                        Text("课程表", fontWeight = FontWeight.Bold)
+                        Text("学业", fontWeight = FontWeight.Bold)
                         Spacer(Modifier.width(8.dp))
                         Text(
                             "第 $week 周 · ${weekCourses.size}节",
@@ -177,11 +211,7 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                     }
                 },
                 actions = {
-                    Text("⤓", fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier
-                        .clickable {
-                            Toast.makeText(context, "在电脑端导入课表，同步后自动出现在这里", Toast.LENGTH_SHORT).show()
-                        }
-                        .padding(horizontal = 10.dp))
+                    // vc85：原「⤓ 导入课表」占位撤除——PC 课务导出已自动同步，无需提示跳转
                     // 09-15 路河：拒 emoji 图标 → Material（问路远=机器人 / 回收站=垃圾桶）
                     IconButton(onClick = onAsk) { Icon(Icons.Default.SmartToy, contentDescription = "问路远") }
                     IconButton(onClick = onTrash) { Icon(Icons.Default.Delete, contentDescription = "回收站") }
@@ -197,12 +227,22 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                 .padding(pad)
                 .padding(horizontal = 14.dp)
         ) {
+            // vc85 hub 分段：课表 / 校历 / 成绩 / 速查（四视图一页一滚动容器）
+            item(key = "seg_tabs") { SegTabs(seg) { seg = it } }
+
+            if (seg == 1) {
+                keiwuCalendarItems(keiwuEvents?.items ?: emptyList(), today)
+            } else if (seg == 2) {
+                keiwuGradesItems(keiwuGrades?.items ?: emptyList())
+            } else if (seg == 3) {
+                keiwuCsuItems(keiwuRef, keiwuLedger?.items ?: emptyList(), csuSub) { csuSub = it }
+            } else {
             if (courses.isEmpty()) {
                 item {
                     EmptyState(
                         icon = EmptyIconCourse,
                         title = "还没有课程表",
-                        subtitle = "电脑端导入课表截图后，会自动同步到这里"
+                        subtitle = "电脑端课务系统排好课后，自动同步到这里"
                     )
                 }
             }
@@ -344,7 +384,7 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                                         val cell = weekCourses.firstOrNull {
                                             it.weekday == i && it.start == s
                                         }
-                                        val dimmed = selCat != null && cell != null && courseCategory(cell.name) != selCat
+                                        val dimmed = selCat != null && cell != null && courseCategoryOf(cell) != selCat
                                         Box(
                                             contentAlignment = Alignment.Center,
                                             modifier = Modifier
@@ -366,7 +406,7 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                                                 }
                                         ) {
                                             if (cell != null) {
-                                                val cc = categoryColor(courseCategory(cell.name))
+                                                val cc = courseColorOf(cell)
                                                 // 木案 .cc：左侧 3dp 分类色条 + 课名两行 + @教室（进行中标注）
                                                 val ongoing = isToday && run {
                                                     val s2 = parseHm(cell.start)
@@ -432,9 +472,8 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                             .horizontalScroll(rememberScrollState())
                             .padding(vertical = 2.dp)
                     ) {
-                        for (cat in listOf(CAT_MATH, CAT_MAJOR, CAT_PUBLIC, CAT_PE)) {
+                        for ((cat, cc) in catList) {
                             val on = selCat == cat
-                            val cc = categoryColor(cat)
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
@@ -549,11 +588,12 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                                 .padding(horizontal = 12.dp, vertical = 9.dp)
                         ) {
                             val tag = n.tags.firstOrNull { courseNames.contains(it) } ?: ""
+                            val tagCourse = courses.firstOrNull { it.name == tag }
                             Text(
                                 "[$tag]",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = categoryColor(courseCategory(tag))
+                                color = if (tagCourse != null) courseColorOf(tagCourse) else categoryColor(courseCategory(tag))
                             )
                             Spacer(Modifier.width(6.dp))
                             Text(
@@ -570,6 +610,7 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                     }
                 }
             }
+            } // vc85：课表段（seg==0）结束
         }
     }
 
@@ -609,6 +650,41 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                 }
             }
         )
+    }
+}
+
+/** vc85 hub 分段条：课表 / 校历 / 成绩 / 速查 */
+@Composable
+private fun SegTabs(seg: Int, onSeg: (Int) -> Unit) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(vertical = 2.dp)
+    ) {
+        val names = listOf("课表", "校历", "成绩", "速查")
+        for ((i, n) in names.withIndex()) {
+            val on = seg == i
+            Text(
+                n,
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (on) Color.White else LuyuanColors.Ink2,
+                modifier = Modifier
+                    .background(
+                        if (on) LuyuanColors.Green700 else MaterialTheme.colorScheme.surface,
+                        RoundedCornerShape(999.dp)
+                    )
+                    .border(
+                        1.dp,
+                        if (on) LuyuanColors.Green700 else MaterialTheme.colorScheme.outline,
+                        RoundedCornerShape(999.dp)
+                    )
+                    .clickable { onSeg(i) }
+                    .padding(horizontal = 15.dp, vertical = 7.dp)
+            )
+        }
     }
 }
 

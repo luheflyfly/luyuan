@@ -51,6 +51,24 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
     private val _courses = MutableStateFlow<List<Course>>(emptyList())
     val courses: StateFlow<List<Course>> = _courses
 
+    /** 课务（PC）打包参考数据（vc85）：null=还没同步到（学业页显示等待提示） */
+    private val _keiwuEvents = MutableStateFlow<com.luyuan.data.KeiwuEventsBundle?>(null)
+    val keiwuEvents: StateFlow<com.luyuan.data.KeiwuEventsBundle?> = _keiwuEvents
+    private val _keiwuGrades = MutableStateFlow<com.luyuan.data.KeiwuGradesBundle?>(null)
+    val keiwuGrades: StateFlow<com.luyuan.data.KeiwuGradesBundle?> = _keiwuGrades
+    private val _keiwuLedger = MutableStateFlow<com.luyuan.data.KeiwuLedgerBundle?>(null)
+    val keiwuLedger: StateFlow<com.luyuan.data.KeiwuLedgerBundle?> = _keiwuLedger
+    private val _keiwuRef = MutableStateFlow<com.luyuan.data.KeiwuRefBundle?>(null)
+    val keiwuRef: StateFlow<com.luyuan.data.KeiwuRefBundle?> = _keiwuRef
+
+    /** 只重读课务打包件（PC 课务导出 → Syncthing 到货后任意一路都能触发） */
+    private fun loadKeiwu() {
+        _keiwuEvents.value = com.luyuan.data.KeiwuStore.events(ctx)
+        _keiwuGrades.value = com.luyuan.data.KeiwuStore.grades(ctx)
+        _keiwuLedger.value = com.luyuan.data.KeiwuStore.ledger(ctx)
+        _keiwuRef.value = com.luyuan.data.KeiwuStore.ref(ctx)
+    }
+
     private val _refreshing = MutableStateFlow(false)
     val refreshing: StateFlow<Boolean> = _refreshing
 
@@ -188,6 +206,9 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
                 _notes.value = NoteRepository.listNotes(ctx)
                 _todayDiary.value = NoteRepository.todayDiaryNote(ctx)
                 _contacts.value = ContactRepository.listContacts(ctx)
+                // vc85：课表/课务打包件也进监听刷新——PC 课务改了，手机自动跟（电脑端为准）
+                _courses.value = V2EntityRepository.listCourses(ctx)
+                loadKeiwu()
                 pending.set(false)
             }
         }
@@ -253,6 +274,7 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
                 _contacts.value = ContactRepository.listContacts(ctx)
                 _expenses.value = V2EntityRepository.listExpenses(ctx)
                 _courses.value = V2EntityRepository.listCourses(ctx)
+                loadKeiwu()
                 _refreshing.value = false
                 _refreshDone.value += 1
                 // 通知桌面「今日卡」组件重算（组件无周期刷新，靠 App 打开/数据变动主动推）
@@ -291,12 +313,13 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 只重扫 v2 实体（账目/课程）——写记账/加课后调用 */
+    /** 只重扫 v2 实体（账目/课程/课务打包件）——写记账/加课后调用 */
     fun refreshV2() {
         suppressSelfTriggered {
             viewModelScope.launch(Dispatchers.IO) {
                 _expenses.value = V2EntityRepository.listExpenses(ctx)
                 _courses.value = V2EntityRepository.listCourses(ctx)
+                loadKeiwu()
             }
         }
     }

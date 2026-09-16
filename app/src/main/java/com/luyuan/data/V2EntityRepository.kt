@@ -40,6 +40,9 @@ data class Course(
     val end: String = "",           // "09:40"
     val weeks: String = "",         // "1-16"（周次过滤 PC 侧配 semester_start，App B1 不过滤）
     val semester: String = "",
+    val category: String = "",      // vc85：PC 课务导出的课目分类（数学/思政/外语…）；空=旧文件走课名归类
+    val color: String = "",         // vc85：PC 课务导出的课目色 "#1d4ed8"；空=走四分类色
+    val source: String = "",        // vc85：keiwu=PC 课务系统导出
     val device: String = "",
     val schema: Int = 2,            // SYNC_FORMAT §10.1 课表实体格式版本
     val deleted: Boolean = false,

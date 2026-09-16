@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material3.Icon
@@ -320,7 +321,7 @@ fun AppRoot(startDest: String) {
                         Triple(5, "待办", Icons.Default.TaskAlt),
                         Triple(3, "日记", Icons.Default.EditNote),
                         Triple(1, "记账", Icons.Default.Payments),
-                        Triple(2, "课程", Icons.Default.CalendarMonth),
+                        Triple(2, "学业", Icons.Default.School),
                         Triple(4, "人脉", Icons.Default.People)
                     )
                     // 被用户从底栏移除的页不显示按钮（页面本身仍可从待办/深链/左缘进入）
@@ -419,7 +420,7 @@ fun AppRoot(startDest: String) {
                                 onAsk = { nav.navigate("ask") },
                                 onTrash = { nav.navigate("trash") },
                                 onDetail = { nav.navigate("detail/$it") } // B5：作业清单点进笔记详情
-                            ) else HiddenTabHint("课程") { navPrefsVersion++ }
+                            ) else HiddenTabHint("学业") { navPrefsVersion++ }
                             3 -> JournalScreen(vm = vm, onRecord = {
                                 vm.startWavRecording()
                                 nav.navigate("record") { launchSingleTop = true }
