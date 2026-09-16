@@ -30,7 +30,9 @@ class LuyuanService : Service() {
         val notification = Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("路远正在录音")
             .setContentText(text)
-            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+            // vc85 通知重绘：品牌小图标+主题色（原 android.R 老喇叭与全 App 不搭）
+            .setSmallIcon(com.luyuan.R.drawable.ic_stat_luyuan)
+            .setColor(0xFF224A3A.toInt())
             .setOngoing(true)
             .build()
         startForeground(NOTI_ID, notification)

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- API 24/25 兜底图标（圆角方底 + 白叶）；26+ 走 mipmap-anydpi-v26 自适应 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="315"
+                android:startColor="#FF2D5A48"
+                android:endColor="#FF1D3F31" />
+            <corners android:radius="10dp" />
+        </shape>
+    </item>
+    <item
+        android:drawable="@drawable/ic_stat_luyuan"
+        android:left="10dp" android:top="10dp"
+        android:right="10dp" android:bottom="10dp" />
+</layer-list>

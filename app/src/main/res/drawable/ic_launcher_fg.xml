@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- App 图标前景（vc85）：品牌白叶子，取自 ic_wg_leaf（22 viewport ×2.6 居中到 108 安全区） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="2.6"
+        android:scaleY="2.6"
+        android:translateX="25.4"
+        android:translateY="25.4">
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="1.6"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M11,3.5c0.5,3 -3.5,4.8 -3.5,8.5a3.5,3.5 0 0 0 7,0c0,-1.5 -0.8,-2.5 -0.8,-2.5s2.8,1 2.8,4a5.5,5.5 0 0 1 -11,0c0,-4.5 4.5,-6.5 5.5,-10z" />
+    </group>
+</vector>

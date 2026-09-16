@@ -22,16 +22,17 @@ object ReminderNotifications {
 
     fun ensureChannel(context: Context) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (nm.getNotificationChannel(CHANNEL_ID) == null) {
-            nm.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "笔记提醒", NotificationManager.IMPORTANCE_HIGH)
-            )
-        }
-        if (nm.getNotificationChannel(CHANNEL_TODO) == null) {
-            nm.createNotificationChannel(
-                NotificationChannel(CHANNEL_TODO, "联系人待办提醒", NotificationManager.IMPORTANCE_HIGH)
-            )
-        }
+        // 无 null 判断：同 id 重复 create 会更新名称/描述（vc85 渠道更名走这里生效）
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_ID, "笔记提醒", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "到点的笔记/校历提醒"
+            }
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_TODO, "待办提醒", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "联系人待人办与微信/QQ 消息待办"
+            }
+        )
     }
 
     fun fire(context: Context, noteId: String, title: String, body: String, channelId: String = CHANNEL_ID) {
@@ -43,11 +44,21 @@ object ReminderNotifications {
             context, noteId.hashCode(), intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        // vc85 通知重绘：正文去掉「[校历] 」这类内部标签前缀，标签进 subtext（右侧小字），不再顶在最前
+        var text = body
+        var sub: String? = null
+        val m = RX_TAG_PREFIX.find(text)
+        if (m != null) {
+            sub = m.groupValues[1]
+            text = text.substring(m.value.length).trim()
+        }
         val n = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(R.drawable.ic_tile_mic)
+            .setSmallIcon(R.drawable.ic_stat_luyuan)
+            .setColor(0xFF224A3A.toInt())
             .setContentTitle(title)
-            .setContentText(body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setSubText(sub)
             .setContentIntent(pi)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setPriority(NotificationCompat.PRIORITY_MAX)
@@ -60,11 +71,14 @@ object ReminderNotifications {
             // 无通知权限：静默跳过（设置页/录音页有引导授权）
         }
     }
+
+    /** 「[校历] 」「[待办] 」等 1-6 字标签前缀（PC 端播种提醒的内部记号，展示层剥掉） */
+    private val RX_TAG_PREFIX = Regex("^\\[([^\\]]{1,6})]\\s*")
 }
 
 /** 到点响铃 + 错过补弹的统一入口 */
 private fun fireReminder(context: Context, note: Note) {
-    ReminderNotifications.fire(context, note.id, "提醒", note.text.take(200))
+    ReminderNotifications.fire(context, note.id, "路远提醒", note.text.take(200))
     NoteRepository.markReminderFired(context, note.id)
 }
 
@@ -119,7 +133,7 @@ object ReminderScheduler {
             .sortedBy { (_, _, at) -> at }
         for ((c, t, _) in todoOverdue.take(5)) {
             if (t.done || t.reminded == true) continue
-            ReminderNotifications.fire(context, "ctodo_${t.id}", "${c.name}的待办", t.text.take(200), ReminderNotifications.CHANNEL_TODO)
+            ReminderNotifications.fire(context, "ctodo_${t.id}", "待办 · ${c.name}", t.text.take(200), ReminderNotifications.CHANNEL_TODO)
             ContactRepository.markTodoReminded(context, c.id, t.id)
         }
     }
@@ -179,7 +193,7 @@ class ReminderReceiver : BroadcastReceiver() {
             val t = c.todos.firstOrNull { it.id == todoId } ?: return
             if (t.done || t.reminded == true) return
             ReminderNotifications.fire(
-                context, "ctodo_$todoId", "${c.name}的待办", t.text.take(200),
+                context, "ctodo_$todoId", "待办 · ${c.name}", t.text.take(200),
                 ReminderNotifications.CHANNEL_TODO
             )
             ContactRepository.markTodoReminded(context, contactId, todoId)
@@ -271,7 +285,8 @@ object JournalReminder {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val n = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_tile_mic)
+            .setSmallIcon(R.drawable.ic_stat_luyuan)
+            .setColor(0xFF224A3A.toInt())
             .setContentTitle("该记日记啦")
             .setContentText("今天想记录点什么？点这里打开路远")
             .setContentIntent(pi)

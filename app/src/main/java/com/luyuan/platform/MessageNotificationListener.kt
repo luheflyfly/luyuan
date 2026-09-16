@@ -98,9 +98,11 @@ class MessageNotificationListener : NotificationListenerService() {
         return false
     }
 
-    /** 抽中消息待办后发一条带「已完成/不要」的通知（路河 09-15） */
+    /** 抽中消息待办后发一条带「已完成/收下/不要」的通知（vc85 通知重绘：Compat 构建+品牌图标+深绿主题；
+     *  顺带修隐患：原实现从不确保渠道存在，API 26+ 渠道缺失时通知会被系统静默丢弃） */
     private fun notifyTodoAction(ctx: android.content.Context, p: com.luyuan.data.PendingMessageTodo) {
         try {
+            ReminderNotifications.ensureChannel(ctx)
             val nm = ctx.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
             val tap = android.app.PendingIntent.getActivity(
                 ctx, 0,
@@ -115,13 +117,17 @@ class MessageNotificationListener : NotificationListenerService() {
                 android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
             )
             val who = if (p.who.isNotBlank()) p.who else if (p.sender.isNotBlank()) p.sender else "消息"
-            val builder = if (android.os.Build.VERSION.SDK_INT >= 26)
-                android.app.Notification.Builder(ctx, ReminderNotifications.CHANNEL_TODO)
-            else
-                @Suppress("DEPRECATION") android.app.Notification.Builder(ctx)
-            builder.setSmallIcon(android.R.drawable.checkbox_on_background)
-                .setContentTitle("$who：${p.text.take(30)}")
-                .setContentText(if (p.whenText.isNotBlank()) p.whenText else "消息里提到的待办")
+            val big = buildString {
+                append(p.text)
+                if (p.whenText.isNotBlank()) append("\n截止：").append(p.whenText)
+            }
+            val builder = androidx.core.app.NotificationCompat.Builder(ctx, ReminderNotifications.CHANNEL_TODO)
+                .setSmallIcon(com.luyuan.R.drawable.ic_stat_luyuan)
+                .setColor(0xFF224A3A.toInt())
+                .setContentTitle("消息待办 · $who")
+                .setContentText(p.text)
+                .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText(big))
+                .setCategory(androidx.core.app.NotificationCompat.CATEGORY_REMINDER)
                 .setAutoCancel(true)
                 .setContentIntent(tap)
                 .addAction(android.R.drawable.checkbox_on_background, "已完成", pi(TodoActionReceiver.ACTION_DONE, p.id.hashCode() * 10 + 1))
