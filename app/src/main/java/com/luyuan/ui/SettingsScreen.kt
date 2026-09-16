@@ -339,7 +339,7 @@ fun SettingsScreen(vm: LuyuanViewModel, onBack: () -> Unit, onAsk: () -> Unit = 
                 )
                 Spacer(Modifier.height(8.dp))
                 BottomNavToggle("记账", com.luyuan.data.BottomNavPrefs.KEY_LEDGER, com.luyuan.data.BottomNavPrefs.showLedger(context))
-                BottomNavToggle("课程", com.luyuan.data.BottomNavPrefs.KEY_COURSE, com.luyuan.data.BottomNavPrefs.showCourse(context))
+                BottomNavToggle("学业", com.luyuan.data.BottomNavPrefs.KEY_COURSE, com.luyuan.data.BottomNavPrefs.showCourse(context))
                 BottomNavToggle("人脉", com.luyuan.data.BottomNavPrefs.KEY_PEOPLE, com.luyuan.data.BottomNavPrefs.showPeople(context))
             }
 

@@ -12,12 +12,13 @@ object BottomNavPrefs {
         ctx.getSharedPreferences("luyuan_bottom_nav", Context.MODE_PRIVATE)
 
     const val KEY_LEDGER = "show_ledger"   // 记账，默认开
-    const val KEY_COURSE = "show_course"   // 课程，默认开
-    const val KEY_PEOPLE = "show_people"   // 人脉，默认开
+    const val KEY_COURSE = "show_course"   // 学业，默认开
+    // vc88（路河 09-16 批准「底栏五签」）：人脉使用频率低，默认收起——设置→底栏自定义一键开回
+    const val KEY_PEOPLE = "show_people"   // 人脉，默认关
 
     fun showLedger(ctx: Context) = prefs(ctx).getBoolean(KEY_LEDGER, true)
     fun showCourse(ctx: Context) = prefs(ctx).getBoolean(KEY_COURSE, true)
-    fun showPeople(ctx: Context) = prefs(ctx).getBoolean(KEY_PEOPLE, true)
+    fun showPeople(ctx: Context) = prefs(ctx).getBoolean(KEY_PEOPLE, false)
 
     fun set(ctx: Context, key: String, v: Boolean) =
         prefs(ctx).edit().putBoolean(key, v).apply()

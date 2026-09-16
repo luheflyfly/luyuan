@@ -3,6 +3,7 @@ package com.luyuan.ui
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -13,11 +14,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -38,7 +42,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -52,6 +55,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -61,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.Image
 import com.luyuan.data.AskRemote
+import com.luyuan.data.NoteRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -90,6 +95,8 @@ fun AskScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
     var confirmClear by remember { mutableStateOf(false) }
     // 私密内容外发授权（立项单 2026-09-13 红线变更）：默认不勾，勾了本次才把「私密」标签笔记一并发出
     var includePrivate by remember { mutableStateOf(false) }
+    // vc88：回答可一键存成笔记（防重复按会话内下标记）
+    val savedTurns = remember { mutableStateListOf<Int>() }
 
     data class PendingImg(val bmp: Bitmap, val dataUrl: String)
     val pending = remember { mutableStateListOf<PendingImg>() }
@@ -171,43 +178,83 @@ fun AskScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
                 // （vc77 胶囊同款套路收编为公共助手）
                 .then(imeLiftPadding())
         ) {
-            // ---------- 模型选择器（点击切换，状态常显） ----------
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant,
+            // ---------- vc88 头部：深绿渐变横条（模型+能力常显，点击切模型） ----------
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp)
+                    .background(
+                        Brush.linearGradient(listOf(LuyuanColors.GradGreenStart, LuyuanColors.GradGreenEnd)),
+                        RoundedCornerShape(16.dp)
+                    )
                     .clickable { showModelDialog = true }
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 8.dp)
-                ) {
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "问路远",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            model.label,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            modifier = Modifier
+                                .background(Color(0x33FFFFFF), RoundedCornerShape(999.dp))
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        )
+                    }
+                    Spacer(Modifier.height(3.dp))
                     Text(
-                        "${model.label}",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        modifier = Modifier.weight(1f)
+                        "回答参考你本机的笔记与待办 · 私密默认不外发",
+                        fontSize = 10.sp,
+                        color = Color(0xFFCFE0D6)
                     )
-                    Text(
-                        if (model.vision) "可发图" else "纯文字",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text("  ▾", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                Text(
+                    if (model.vision) "可发图" else "纯文字",
+                    fontSize = 11.sp,
+                    color = Color(0xFFCFE0D6),
+                    modifier = Modifier
+                        .background(Color(0x26FFFFFF), RoundedCornerShape(999.dp))
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                )
             }
 
             if (messages.isEmpty() && !busy) {
                 Text(
-                    "问点什么，我会参考你本机最近的笔记和待办（私密标签的笔记默认不发出去，\n" +
-                        "需要时可在输入框上方勾选『包含私密内容』）。\n" +
-                        "要发图片请先切到视觉模型。API Key 在「设置 → 问路远」里填。",
+                    "我会参考你本机最近的笔记和待办来回答（私密笔记默认不外发，要发图片先切视觉模型）。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(20.dp)
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
                 )
+                // vc88 快捷问法：一点填入，不用想开场白
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 12.dp)
+                ) {
+                    for (q in listOf("今天有什么作业？", "最近有什么要截止的？", "本周课表帮我看看", "综测加分怎么凑？")) {
+                        Text(
+                            q,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = LuyuanColors.Green700,
+                            modifier = Modifier
+                                .background(LuyuanColors.Green100, RoundedCornerShape(999.dp))
+                                .clickable { question = q }
+                                .padding(horizontal = 12.dp, vertical = 7.dp)
+                        )
+                    }
+                }
             }
             LazyColumn(
                 state = listState,
@@ -220,26 +267,60 @@ fun AskScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
                 items(messages) { m ->
                     val isUser = m.role == "user"
                     Box(modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            m.content,
-                            fontSize = 15.sp,
-                            lineHeight = 21.sp,
-                            color = if (isUser) MaterialTheme.colorScheme.onPrimary
-                            else MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier
-                                .align(if (isUser) Alignment.CenterEnd else Alignment.CenterStart)
-                                .widthIn(max = 320.dp)
-                                .background(
-                                    if (isUser) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.surfaceVariant,
-                                    RoundedCornerShape(
-                                        14.dp, 14.dp,
-                                        if (isUser) 4.dp else 14.dp,
-                                        if (isUser) 14.dp else 4.dp
+                        Column(
+                            horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
+                            modifier = Modifier.align(if (isUser) Alignment.CenterEnd else Alignment.CenterStart)
+                        ) {
+                            Text(
+                                m.content,
+                                fontSize = 15.sp,
+                                lineHeight = 21.sp,
+                                color = if (isUser) MaterialTheme.colorScheme.onPrimary
+                                else MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier
+                                    .widthIn(max = 320.dp)
+                                    .background(
+                                        if (isUser) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.surfaceVariant,
+                                        RoundedCornerShape(
+                                            14.dp, 14.dp,
+                                            if (isUser) 4.dp else 14.dp,
+                                            if (isUser) 14.dp else 4.dp
+                                        )
                                     )
+                                    .padding(horizontal = 12.dp, vertical = 9.dp)
+                            )
+                            // vc88：回答一键存成笔记（标签「问路远」），防重复
+                            if (!isUser) {
+                                val idx = messages.indexOf(m)
+                                val saved = idx in savedTurns
+                                Text(
+                                    if (saved) "已存进笔记 ✓" else "存为笔记",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (saved) LuyuanColors.Ink4 else LuyuanColors.Green700,
+                                    modifier = Modifier
+                                        .padding(start = 6.dp, top = 3.dp)
+                                        .clickable(enabled = !saved) {
+                                            try {
+                                                NoteRepository.createManual(
+                                                    context, m.content, tags = listOf("问路远")
+                                                )
+                                                savedTurns.add(idx)
+                                                Toast.makeText(
+                                                    context, "已存进笔记（标签：问路远）",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            } catch (e: Exception) {
+                                                Toast.makeText(
+                                                    context, "没存上：" + (e.message ?: ""),
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
+                                        }
                                 )
-                                .padding(horizontal = 12.dp, vertical = 9.dp)
-                        )
+                            }
+                        }
                     }
                 }
                 if (busy) {
