@@ -532,8 +532,8 @@ private fun LazyListScope.keiwuScholarshipCards(ref: KeiwuRefBundle) {
                 }
                 Spacer(Modifier.height(4.dp))
                 val amt = when {
-                    s.amount != null -> fmtMoney(s.amount)
-                    s.amount_min != null && s.amount_max != null -> "${fmtMoney(s.amount_min)}-${fmtMoney(s.amount_max)}"
+                    s.amount != null -> keiwuFmtMoney(s.amount)
+                    s.amount_min != null && s.amount_max != null -> "${keiwuFmtMoney(s.amount_min)}-${keiwuFmtMoney(s.amount_max)}"
                     else -> "—"
                 }
                 Row(verticalAlignment = Alignment.Bottom) {
@@ -554,7 +554,7 @@ private fun LazyListScope.keiwuScholarshipCards(ref: KeiwuRefBundle) {
     }
 }
 
-private fun fmtMoney(v: Double): String =
+private fun keiwuFmtMoney(v: Double): String =
     if (v == v.toLong().toDouble()) v.toLong().toString() else v.toString()
 
 @Composable
