@@ -1,5 +1,7 @@
 package com.luyuan.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
@@ -69,6 +71,7 @@ import java.time.format.TextStyle
 import java.util.Locale
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -133,6 +136,7 @@ private data class AddSlot(val weekday: Int, val start: String, val end: String)
 fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, onDetail: (String) -> Unit = {}) {
     val courses by vm.courses.collectAsStateWithLifecycle()
     val notes by vm.notes.collectAsStateWithLifecycle()
+    val syncTodos by vm.todos.collectAsStateWithLifecycle()
     val keiwuEvents by vm.keiwuEvents.collectAsStateWithLifecycle()
     val keiwuGrades by vm.keiwuGrades.collectAsStateWithLifecycle()
     val keiwuLedger by vm.keiwuLedger.collectAsStateWithLifecycle()
@@ -141,9 +145,33 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
     val prefs = remember { context.getSharedPreferences("luyuan_prefs", Context.MODE_PRIVATE) }
     val today = remember { LocalDate.now() }
 
-    // vc85 hub：顶部分段切换 课表/校历/成绩/速查，四视图共用一页
+    // vc85 hub：顶部分段切换 课表/日程/成绩/速查，四视图共用一页
     var seg by remember { mutableStateOf(0) }
     var csuSub by remember { mutableStateOf(0) }
+
+    // ---------- 拍作业（vc87 一期：选学科 → 系统相机 → 压缩进 images/ + 带课程标签的笔记） ----------
+    var pickSubject by remember { mutableStateOf(false) }
+    var subject by remember { mutableStateOf("") }
+    val cameraUri = remember { mutableStateOf<android.net.Uri?>(null) }
+    val cameraFile = remember { mutableStateOf<java.io.File?>(null) }
+    val takePicture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        val sub = subject
+        val uri = cameraUri.value
+        val tmp = cameraFile.value
+        cameraUri.value = null
+        cameraFile.value = null
+        try { tmp?.delete() } catch (_: Exception) {}
+        if (ok && uri != null && sub.isNotBlank()) {
+            val rel = NoteRepository.importImage(context, uri)
+            if (rel != null) {
+                NoteRepository.createManual(context, "[$sub] 📷 作业照片", tags = listOf(sub), images = listOf(rel))
+                vm.refreshNotes()
+                Toast.makeText(context, "已拍入「$sub」，作业清单里看", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, "照片没存上，再试一次", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     // 学期周次锚点：prefs 优先；默认=中南校历新生第一周周一 2026-09-14（domain/Semester.kt，2026 级口径）
     val start = remember(prefs) { semesterStart(today, prefs) }
@@ -184,12 +212,12 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
         if (mx > 0) mx else 20
     }
 
-    // 作业 = 标签里带课程名的笔记（归课约定），最新在前
+    // 作业 = 标签里带课程名的笔记（归课约定），最新在前（vc87 拍作业加入，放宽到 12 条）
     val homework = remember(notes, courseNames) {
         if (courseNames.isEmpty()) emptyList()
         else notes.filter { n -> n.tags.any { t -> t.isNotBlank() && courseNames.contains(t) } }
             .sortedByDescending { it.updated_at.ifBlank { it.created_at } }
-            .take(8)
+            .take(12)
     }
 
     Scaffold(
@@ -231,7 +259,8 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
             item(key = "seg_tabs") { SegTabs(seg) { seg = it } }
 
             if (seg == 1) {
-                keiwuCalendarItems(keiwuEvents?.items ?: emptyList(), today)
+                // vc87 日程段：作业截止 + 校历事件合并时间线（路河「截止日期和开始日期单开一页」）
+                keiwuAgendaItems(keiwuEvents?.items ?: emptyList(), syncTodos, today)
             } else if (seg == 2) {
                 keiwuGradesItems(keiwuGrades?.items ?: emptyList())
             } else if (seg == 3) {
@@ -549,15 +578,35 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                 }
             }
 
-            // 课程作业清单（打课程名标签的笔记；＋记作业）
+            // 课程作业清单（打课程名标签的笔记；＋记作业；vc87 拍作业照片按学科分组）
             if (courseNames.isNotEmpty()) {
                 item {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "课程作业（打课程标签的笔记）",
+                            "课程作业（按学科）",
                             fontSize = 12.sp, fontWeight = FontWeight.Bold, color = LuyuanColors.Ink2
                         )
                         Spacer(Modifier.weight(1f))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clickable { pickSubject = true }
+                                .padding(horizontal = 6.dp, vertical = 4.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.PhotoCamera,
+                                contentDescription = "拍作业",
+                                tint = LuyuanColors.Green700,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(Modifier.width(3.dp))
+                            Text(
+                                "拍作业",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = LuyuanColors.Green700
+                            )
+                        }
                         Text(
                             "＋ 记作业",
                             fontSize = 11.sp,
@@ -572,12 +621,26 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                 if (homework.isEmpty()) {
                     item {
                         Text(
-                            "还没有作业。记一条带课程标签的笔记（或点「＋ 记作业」），就会出现在这里。",
+                            "还没有作业。点「拍作业」拍张照，或记一条带课程标签的笔记，就会出现在这里。",
                             fontSize = 11.sp, color = LuyuanColors.Ink4
                         )
                     }
                 }
-                for (n in homework) {
+                val byCourse = courseNames.map { cn -> cn to homework.filter { it.tags.contains(cn) } }
+                    .filter { it.second.isNotEmpty() }
+                for ((cn, list) in byCourse) {
+                    item(key = "hw_head_$cn") {
+                        val cc = courses.firstOrNull { it.name == cn }?.let { courseColorOf(it) }
+                            ?: categoryColor(courseCategory(cn))
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+                            Box(Modifier.size(6.dp).background(cc, RoundedCornerShape(3.dp)))
+                            Spacer(Modifier.width(5.dp))
+                            Text(cn, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = cc)
+                            Spacer(Modifier.width(5.dp))
+                            Text("${list.size} 条", fontSize = 9.5.sp, color = LuyuanColors.Ink4)
+                        }
+                    }
+                    for (n in list) {
                     item(key = "hw_${n.id}") {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -608,7 +671,8 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                             )
                         }
                     }
-                }
+                    } // for (n in list)
+                } // for ((cn, list) in byCourse)
             }
             } // vc85：课表段（seg==0）结束
         }
@@ -630,6 +694,31 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                     Toast.makeText(context, "已加课：周" + dayShort(slot.weekday) + " " + slot.start + " " + name, Toast.LENGTH_SHORT).show()
                 } catch (e: Exception) {
                     Toast.makeText(context, "加课失败：${e.message ?: "写入同步目录没成功"}", Toast.LENGTH_LONG).show()
+                }
+            }
+        )
+    }
+
+    // ---------- 拍作业 · 选学科（vc87） ----------
+    if (pickSubject) {
+        SubjectPickDialog(
+            courseNames = courseNames.ifEmpty { listOf("未分类") },
+            preselect = next?.first?.name ?: courseNames.firstOrNull() ?: "未分类",
+            onDismiss = { pickSubject = false },
+            onGo = { sel ->
+                subject = sel
+                pickSubject = false
+                try {
+                    val dir = java.io.File(context.cacheDir, "camera").apply { mkdirs() }
+                    val f = java.io.File(dir, "hw_" + System.currentTimeMillis() + ".jpg")
+                    cameraFile.value = f
+                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                        context, context.packageName + ".fileprovider", f
+                    )
+                    cameraUri.value = uri
+                    takePicture.launch(uri)
+                } catch (e: Exception) {
+                    Toast.makeText(context, "相机启动失败：" + (e.message ?: ""), Toast.LENGTH_SHORT).show()
                 }
             }
         )
@@ -663,7 +752,7 @@ private fun SegTabs(seg: Int, onSeg: (Int) -> Unit) {
             .horizontalScroll(rememberScrollState())
             .padding(vertical = 2.dp)
     ) {
-        val names = listOf("课表", "校历", "成绩", "速查")
+        val names = listOf("课表", "日程", "成绩", "速查")
         for ((i, n) in names.withIndex()) {
             val on = seg == i
             Text(
@@ -828,6 +917,59 @@ private fun HomeworkDialog(
                     )
                 )
                 Text("存成一条带课程标签的笔记，电脑端课程页同一套口径。", fontSize = 10.sp, color = LuyuanColors.Ink4)
+            }
+        }
+    )
+}
+
+/** vc87 拍作业 · 学科选择（默认=下一节课的课名；照片自动挂到该学科标签下） */
+@Composable
+private fun SubjectPickDialog(
+    courseNames: List<String>,
+    preselect: String,
+    onDismiss: () -> Unit,
+    onGo: (String) -> Unit
+) {
+    var sel by remember { mutableStateOf(preselect) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("拍作业 · 选学科", fontWeight = FontWeight.Bold) },
+        confirmButton = {
+            TextButton(onClick = { if (sel.isNotBlank()) onGo(sel) }) { Text("拍照") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("算了") } },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.horizontalScroll(rememberScrollState())
+                ) {
+                    for (c in courseNames) {
+                        val on = sel == c
+                        Text(
+                            c,
+                            fontSize = 11.sp,
+                            fontWeight = if (on) FontWeight.ExtraBold else FontWeight.Normal,
+                            color = if (on) MaterialTheme.colorScheme.primary else LuyuanColors.Ink3,
+                            modifier = Modifier
+                                .background(
+                                    if (on) LuyuanColors.Green50 else MaterialTheme.colorScheme.surface,
+                                    RoundedCornerShape(999.dp)
+                                )
+                                .border(
+                                    1.dp,
+                                    if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                    RoundedCornerShape(999.dp)
+                                )
+                                .clickable { sel = c }
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+                Text(
+                    "照片自动压缩存进同步目录（电脑端也能看），并挂到「$sel」学科下。",
+                    fontSize = 10.sp, color = LuyuanColors.Ink4
+                )
             }
         }
     )

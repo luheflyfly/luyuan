@@ -117,7 +117,7 @@ private fun KeiwuSectionHead(text: String, count: String = "") {
     }
 }
 
-// ---------- 校历 ----------
+// ---------- 日程（vc87：作业截止 + 校历事件合并时间线；路河「截止日期和开始日期单开一页」→ 学业页分段承载） ----------
 
 /** 提前提醒天数：事件自带优先，缺省按类型（镜像 PC server 口径：考试7/评奖5/假期2/军训3/报到3/其他3） */
 internal fun keiwuEventLead(e: KeiwuEvent): Int =
@@ -126,132 +126,152 @@ internal fun keiwuEventLead(e: KeiwuEvent): Int =
         "考试" -> 7; "评奖" -> 5; "假期" -> 2; "军训" -> 3; "报到" -> 3; else -> 3
     }
 
-internal data class KeiwuEventDays(val e: KeiwuEvent, val days: Int, val ongoing: Boolean)
+internal data class KeiwuAgendaItem(
+    val date: LocalDate,
+    val title: String,
+    val sub: String,
+    val kind: String,
+    val official: Boolean,
+    val note: String,
+    val days: Int,
+    val isTodo: Boolean
+)
 
-internal fun keiwuEventDays(items: List<KeiwuEvent>, today: LocalDate): List<KeiwuEventDays> =
-    items.filter { !it.deleted && it.date.isNotBlank() }.mapNotNull { e ->
-        val d = try {
+/** 事件（校历）+ 未完成作业（带 ISO 截止日的 todo_*.json）合并成一条日程线 */
+internal fun keiwuAgendaBuild(events: List<KeiwuEvent>, todos: List<com.luyuan.data.Todo>, today: LocalDate): List<KeiwuAgendaItem> {
+    val out = mutableListOf<KeiwuAgendaItem>()
+    for (e in events) {
+        if (e.deleted || e.date.isBlank()) continue
+        val ld = try {
             LocalDate.parse(e.date.take(10))
         } catch (_: Exception) {
-            null
-        } ?: return@mapNotNull null
-        val days = d.toEpochDay().toInt() - today.toEpochDay().toInt()
-        val ongoing = days < 0 && e.end.isNotBlank() && try {
-            (LocalDate.parse(e.end.take(10)).toEpochDay() >= today.toEpochDay())
+            continue
+        }
+        val ongoing = e.end.isNotBlank() && try {
+            LocalDate.parse(e.end.take(10)).toEpochDay() >= today.toEpochDay()
         } catch (_: Exception) {
             false
         }
-        KeiwuEventDays(e, days, ongoing)
+        if (ld.isBefore(today) && !ongoing) continue   // 过去的纯事件不进日程
+        out.add(
+            KeiwuAgendaItem(ld, e.name, e.type, e.type, e.source == "官方校历", e.note,
+                (ld.toEpochDay() - today.toEpochDay()).toInt(), isTodo = false)
+        )
     }
+    for (t in todos) {
+        if (t.done || t.deleted) continue
+        val d = t.when_text.trim()
+        if (d.length < 10) continue   // 没有结构化截止日的（自由文本"下课后"）不进日程
+        val ld = try {
+            LocalDate.parse(d.substring(0, 10))
+        } catch (_: Exception) {
+            continue
+        }
+        out.add(
+            KeiwuAgendaItem(ld, t.text, if (t.who.isNotBlank() && t.who != "课务") t.who else "作业",
+                "作业", official = false, note = "", days = (ld.toEpochDay() - today.toEpochDay()).toInt(),
+                isTodo = true)
+        )
+    }
+    return out.sortedWith(compareBy({ it.date }, { !it.isTodo }))
+}
 
-fun LazyListScope.keiwuCalendarItems(events: List<KeiwuEvent>, today: LocalDate) {
-    val all = keiwuEventDays(events, today)
-    val urgent = all.filter { it.days in 0..keiwuEventLead(it.e) || it.ongoing }
-        .sortedBy { it.days }
-    val upcoming = all.filter { it.e.date.take(10) >= today.toString() }
-        .sortedBy { it.days }
-    val past = all.filter { it.days < 0 && !it.ongoing }.takeLast(8).reversed()
+fun LazyListScope.keiwuAgendaItems(
+    events: List<KeiwuEvent>,
+    todos: List<com.luyuan.data.Todo>,
+    today: LocalDate
+) {
+    val all = keiwuAgendaBuild(events, todos, today)
+    val overdue = all.filter { it.isTodo && it.days < 0 }.sortedBy { it.days }
+    val urgent = all.filter {
+        (it.isTodo && it.days in 0..1) ||
+            (!it.isTodo && it.days in 0..when (it.kind) {
+                "考试" -> 7; "评奖" -> 5; "假期" -> 2; else -> 3
+            })
+    }.sortedBy { it.days }
+    val upcoming = all.filter { it.days >= 0 }
 
-    item(key = "cal_urgent_head") { KeiwuSectionHead("需要你上心", "${urgent.size} 条临近") }
+    if (overdue.isNotEmpty()) {
+        item(key = "ag_overdue_head") { KeiwuSectionHead("逾期未交", "${overdue.size} 条") }
+        for ((idx, u) in overdue.withIndex()) {
+            item(key = "ag_od_" + u.date.toString() + "_$idx") { agendaRow(u) }
+        }
+    }
+    item(key = "ag_urgent_head") { KeiwuSectionHead("需要你上心", "${urgent.size} 条临近") }
     if (urgent.isEmpty()) {
-        item(key = "cal_urgent_empty") {
+        item(key = "ag_urgent_empty") {
             Text(
-                "近期没有要紧的校历事件",
+                "近期没有要紧的日子",
                 fontSize = 11.5.sp, color = LuyuanColors.Ink4,
                 modifier = Modifier.padding(vertical = 6.dp)
             )
         }
     }
     for ((idx, u) in urgent.withIndex()) {
-        item(key = "cal_u_${u.e.id}_$idx") {
-            val label = when {
-                u.days < 0 -> "进行中"
-                u.days == 0 -> "今天"
-                u.days == 1 -> "明天"
-                else -> "${u.days}天后"
-            }
-            val (fg, bg) = if (u.days <= 1 || u.ongoing) LuyuanColors.Red to LuyuanColors.RedBg
-            else if (u.days <= 2) LuyuanColors.Amber to LuyuanColors.AmberBg
-            else LuyuanColors.Green700 to LuyuanColors.Green100
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
-                    .padding(horizontal = 12.dp, vertical = 9.dp)
-            ) {
-                Text(
-                    label, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = fg,
-                    modifier = Modifier.background(bg, RoundedCornerShape(6.dp))
-                        .padding(horizontal = 6.dp, vertical = 3.dp)
-                )
-                Spacer(Modifier.width(9.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        u.e.name, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                        color = LuyuanColors.Ink1, maxLines = 1, overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        (u.e.type + " · " + u.e.date + (if (u.e.end.isNotBlank() && u.e.end != u.e.date) " → " + u.e.end.take(10) else "")),
-                        fontSize = 10.sp, color = LuyuanColors.Ink3
-                    )
-                }
-            }
-        }
+        item(key = "ag_u_" + u.date.toString() + "_$idx") { agendaRow(u) }
     }
-
-    item(key = "cal_tl_head") {
+    item(key = "ag_tl_head") {
         Spacer(Modifier.height(4.dp))
-        KeiwuSectionHead("校历时间轴", "未来 ${upcoming.size} 条")
+        KeiwuSectionHead("日程时间轴", "未来 ${upcoming.size} 条")
     }
     for ((idx, u) in upcoming.withIndex()) {
-        item(key = "cal_f_${u.e.id}_$idx") {
-            val (bfg, bbg) = keiwuTypeBadgeColor(u.e.type)
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
-                    .padding(horizontal = 12.dp, vertical = 9.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        u.e.date.take(10), fontSize = 10.5.sp, fontWeight = FontWeight.Bold,
-                        color = LuyuanColors.Green700
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    KeiwuBadge(u.e.type.ifBlank { "其他" }, bfg, bbg)
-                    if (u.e.source == "官方校历") {
-                        Spacer(Modifier.width(5.dp))
-                        KeiwuOfficialTag()
-                    }
-                }
-                Spacer(Modifier.height(3.dp))
-                Text(
-                    u.e.name, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = LuyuanColors.Ink1
-                )
-                if (u.e.note.isNotBlank()) {
-                    Text(u.e.note, fontSize = 10.5.sp, color = LuyuanColors.Ink3, lineHeight = 15.sp)
-                }
-            }
-        }
+        item(key = "ag_f_" + u.date.toString() + "_$idx") { agendaRow(u) }
     }
-    for ((idx, u) in past.withIndex()) {
-        item(key = "cal_p_${u.e.id}_$idx") {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 5.dp)
-            ) {
-                Text(
-                    u.e.date.take(10), fontSize = 10.sp, color = LuyuanColors.Ink4
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    u.e.name, fontSize = 12.sp, color = LuyuanColors.Ink3,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis
-                )
+}
+
+@Composable
+private fun agendaRow(u: KeiwuAgendaItem) {
+    val urgent = u.isTodo && u.days <= 1
+    val (lfg, lbg) = when {
+        u.days <= 1 -> LuyuanColors.Red to LuyuanColors.RedBg
+        u.days <= 3 -> LuyuanColors.Amber to LuyuanColors.AmberBg
+        else -> LuyuanColors.Green700 to LuyuanColors.Green100
+    }
+    val label = when {
+        u.days < 0 -> "逾期" + (-u.days) + "天"
+        u.days == 0 -> "今天"
+        u.days == 1 -> "明天"
+        else -> "" + u.days + "天"
+    }
+    val (bfg, bbg) = keiwuTypeBadgeColor(u.kind)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
+            .border(
+                1.dp,
+                if (u.days <= 0) LuyuanColors.RedBg else MaterialTheme.colorScheme.outline,
+                RoundedCornerShape(12.dp)
+            )
+            .padding(horizontal = 12.dp, vertical = 9.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                u.date.toString().let { if (it.length == 10) it.substring(5) else it },
+                fontSize = 11.sp, fontWeight = FontWeight.Bold, color = LuyuanColors.Green700
+            )
+            Spacer(Modifier.width(7.dp))
+            KeiwuBadge(u.kind, bfg, bbg)
+            if (u.official) {
+                Spacer(Modifier.width(5.dp))
+                KeiwuOfficialTag()
             }
+            Spacer(Modifier.weight(1f))
+            Text(
+                label, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = lfg,
+                modifier = Modifier.background(lbg, RoundedCornerShape(6.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            )
+        }
+        Spacer(Modifier.height(3.dp))
+        Text(
+            u.title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = LuyuanColors.Ink1
+        )
+        if (u.sub.isNotBlank() && u.sub != u.kind) {
+            Text(u.sub, fontSize = 10.5.sp, color = LuyuanColors.Ink3)
+        }
+        if (u.note.isNotBlank()) {
+            Text(u.note, fontSize = 10.5.sp, color = LuyuanColors.Ink3, lineHeight = 15.sp)
         }
     }
 }

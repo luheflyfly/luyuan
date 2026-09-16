@@ -175,5 +175,16 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/volume_service_config" />
         </service>
+
+        <!-- vc87 拍作业：FileProvider 供系统相机写入 cache/camera/ 临时文件（拍照后压缩进同步目录 images/） -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/camera_paths" />
+        </provider>
     </application>
 </manifest>

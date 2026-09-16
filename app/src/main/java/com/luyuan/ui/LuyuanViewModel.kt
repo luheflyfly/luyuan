@@ -51,6 +51,10 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
     private val _courses = MutableStateFlow<List<Course>>(emptyList())
     val courses: StateFlow<List<Course>> = _courses
 
+    /** 同步待办（todo_*.json：电脑消息待办/课务作业；vc87 日程段用截止日期） */
+    private val _todos = MutableStateFlow<List<com.luyuan.data.Todo>>(emptyList())
+    val todos: StateFlow<List<com.luyuan.data.Todo>> = _todos
+
     /** 课务（PC）打包参考数据（vc85）：null=还没同步到（学业页显示等待提示） */
     private val _keiwuEvents = MutableStateFlow<com.luyuan.data.KeiwuEventsBundle?>(null)
     val keiwuEvents: StateFlow<com.luyuan.data.KeiwuEventsBundle?> = _keiwuEvents
@@ -206,8 +210,9 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
                 _notes.value = NoteRepository.listNotes(ctx)
                 _todayDiary.value = NoteRepository.todayDiaryNote(ctx)
                 _contacts.value = ContactRepository.listContacts(ctx)
-                // vc85：课表/课务打包件也进监听刷新——PC 课务改了，手机自动跟（电脑端为准）
+                // vc87：课表/课务打包件/同步待办也进监听刷新——PC 课务改了，手机自动跟（电脑端为准）
                 _courses.value = V2EntityRepository.listCourses(ctx)
+                _todos.value = com.luyuan.data.TodoStore.list(ctx)
                 loadKeiwu()
                 pending.set(false)
             }
@@ -274,6 +279,7 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
                 _contacts.value = ContactRepository.listContacts(ctx)
                 _expenses.value = V2EntityRepository.listExpenses(ctx)
                 _courses.value = V2EntityRepository.listCourses(ctx)
+                _todos.value = com.luyuan.data.TodoStore.list(ctx)
                 loadKeiwu()
                 _refreshing.value = false
                 _refreshDone.value += 1
@@ -313,12 +319,13 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 只重扫 v2 实体（账目/课程/课务打包件）——写记账/加课后调用 */
+    /** 只重扫 v2 实体（账目/课程/待办/课务打包件）——写记账/加课后调用 */
     fun refreshV2() {
         suppressSelfTriggered {
             viewModelScope.launch(Dispatchers.IO) {
                 _expenses.value = V2EntityRepository.listExpenses(ctx)
                 _courses.value = V2EntityRepository.listCourses(ctx)
+                _todos.value = com.luyuan.data.TodoStore.list(ctx)
                 loadKeiwu()
             }
         }

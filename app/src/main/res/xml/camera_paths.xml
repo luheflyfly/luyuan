@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- vc87 拍作业：系统相机写入的临时目录（拍照成功后压缩进同步目录 images/，临时件随手删） -->
+<paths>
+    <cache-path
+        name="camera"
+        path="camera/" />
+</paths>
