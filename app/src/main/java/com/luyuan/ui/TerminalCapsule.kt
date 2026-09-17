@@ -39,7 +39,6 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -116,7 +115,6 @@ fun TerminalCapsule(
                     singleLine = true,
                     placeholder = { Text("搜索笔记…", fontSize = 14.sp, color = LuyuanColors.Ink3) },
                     textStyle = TextStyle(fontSize = 15.5.sp, color = LuyuanColors.Ink1),
-                    cursorBrush = SolidColor(LuyuanColors.Green700),
                     colors = fieldColors,
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
@@ -129,7 +127,6 @@ fun TerminalCapsule(
                     onValueChange = onInputTextChange,
                     placeholder = { Text("记一笔，回车存笔记；点「日记」存进今天…", fontSize = 14.sp, color = LuyuanColors.Ink3) },
                     textStyle = TextStyle(fontSize = 15.5.sp, color = LuyuanColors.Ink1),
-                    cursorBrush = SolidColor(LuyuanColors.Green700),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { onCommitDiary() }),
                     maxLines = 4,
