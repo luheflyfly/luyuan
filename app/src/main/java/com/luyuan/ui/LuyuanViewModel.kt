@@ -416,7 +416,16 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
         val t = text.trim()
         if (t.isBlank()) return
         viewModelScope.launch(Dispatchers.IO) {
-            NoteRepository.createManual(ctx, t)
+            try {
+                NoteRepository.createManual(ctx, t)
+            } catch (e: Exception) {
+                // vc89：保存失败不再静默（路河「无法保存笔记」时至少能看到原因）
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    android.widget.Toast.makeText(
+                        ctx, "没存上：" + (e.message ?: e.javaClass.simpleName), android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
             refreshNotes()
         }
     }
@@ -425,8 +434,16 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
         val t = text.trim()
         if (t.isEmpty()) return
         viewModelScope.launch(Dispatchers.IO) {
-            NoteRepository.saveDiary(ctx, t)
-            _diaryEcho.value = _diaryEcho.value + 1
+            try {
+                NoteRepository.saveDiary(ctx, t)
+                _diaryEcho.value = _diaryEcho.value + 1
+            } catch (e: Exception) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    android.widget.Toast.makeText(
+                        ctx, "日记没存上：" + (e.message ?: e.javaClass.simpleName), android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
             refreshNotes()
         }
     }

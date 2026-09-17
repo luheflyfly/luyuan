@@ -226,10 +226,12 @@ fun AppRoot(startDest: String) {
         rootView.viewTreeObserver.addOnGlobalLayoutListener(listener)
         onDispose { rootView.viewTreeObserver.removeOnGlobalLayoutListener(listener) }
     }
-    // 键盘抬升单源取 max：insets 可信的机型＝ime insets（等价原 imePadding 行为）；
-    // insets 恒 0 的 vivo＝实测兜底。只走一份 padding，两种来源绝不叠加。
+    // 键盘抬升单源：insets 可信（>0）直接用 insets——部分 ROM 的实测值会把导航栏/候选条
+    // 一并算进去导致输入框悬空太高（路河 09-16「输入法上端的位置太远了」）；insets=0 的
+    // 老 vivo 才走 GlobalLayout 实测兜底（vc77 两轮实证 insets 恒 0 的机型）。
     val kbBottomPad = with(androidx.compose.ui.platform.LocalDensity.current) {
-        maxOf(WindowInsets.ime.getBottom(this), measuredImePx).toDp()
+        val insetBottom = WindowInsets.ime.getBottom(this)
+        (if (insetBottom > 0) insetBottom else measuredImePx).toDp()
     }
 
     // 首启引导（v2/onboarding.html 施工）：只在首次启动出现；完成=落笔记页+胶囊展开（深链 auto=note 同款）
@@ -310,12 +312,17 @@ fun AppRoot(startDest: String) {
     // 待确认待办红点（vc79：挂底栏「待办」钮）：进页/切页即数 + 每 15s 兜底轮询（通知栏动作改动无广播）
     var pendingTodoCount by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
     androidx.compose.runtime.LaunchedEffect(pagerState.currentPage) {
-        pendingTodoCount = runCatching { com.luyuan.data.PendingMessageTodoStore.list(ctx).size }.getOrDefault(0)
+        // vc89：统计挪 IO 线程——此前在主线程扫盘，每次切页卡一下（路河「切页按钮闪烁」）
+        pendingTodoCount = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { com.luyuan.data.PendingMessageTodoStore.list(ctx).size }.getOrDefault(0)
+        }
     }
     androidx.compose.runtime.LaunchedEffect(Unit) {
         while (true) {
             kotlinx.coroutines.delay(15_000)
-            pendingTodoCount = runCatching { com.luyuan.data.PendingMessageTodoStore.list(ctx).size }.getOrDefault(0)
+            pendingTodoCount = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { com.luyuan.data.PendingMessageTodoStore.list(ctx).size }.getOrDefault(0)
+            }
         }
     }
 
@@ -508,7 +515,12 @@ fun AppRoot(startDest: String) {
                         .background(LuyuanColors.Green700, RoundedCornerShape(999.dp))
                         .clickable {
                             showDiaryEcho = false
-                            scope.launch { pagerState.animateScrollToPage(3) } // 3 = 日记页
+                            scope.launch {
+                                // vc89：日记页 = 底栏可见序映射（vc86 重排后写死 3 会跳去记账）
+                                pagerState.animateScrollToPage(
+                                    tabs.indexOfFirst { it.first == 3 }.takeIf { it >= 0 } ?: 0
+                                )
+                            }
                         }
                         .padding(horizontal = 16.dp, vertical = 10.dp)
                 ) {
@@ -561,7 +573,12 @@ fun AppRoot(startDest: String) {
                             draftPrefs.edit().remove("terminal_draft").apply()
                             expanded = false
                             focusManager.clearFocus()
-                            scope.launch { pagerState.animateScrollToPage(3) } // 3 = 日记页
+                            scope.launch {
+                                // vc89：日记页 = 底栏可见序映射（同上，写死 3 已错位）
+                                pagerState.animateScrollToPage(
+                                    tabs.indexOfFirst { it.first == 3 }.takeIf { it >= 0 } ?: 0
+                                )
+                            }
                         }
                     },
                     onPickImage = {
@@ -594,20 +611,21 @@ fun AppRoot(startDest: String) {
                 )
             }
             // 笔记页【左缘】右滑 → 问路远抽屉（left-ia 一层；设置=二层在问路远上再滑）。
+            // vc89：扩到所有主页签 + 加宽（路河 09-16「在笔记页无法从左缘滑出设置」——28dp 起手
+            // 稍偏就命中 Pager 变成切页；36dp 兼顾起手容错与不吞翻页）。
             // 09-13 夜修「滑动切页不行」：这条覆盖层是 hit-target，压在 Pager 上方——从它起手的
-            // 手势被 hit-test 全部判给它，等于屏幕左缘一条 36dp 宽的手势黑洞。收窄到 16dp 只守
-            // 系统返回手势的边缘地带；条上左滑离手时手动翻下一页（事件无法转发给 Pager）。
-            if (currentRoute == "home" && pagerState.currentPage == 0 && !showAsk && !showSettings) {
+            // 手势被 hit-test 全部判给它。条上左滑离手时手动翻下一页（事件无法转发给 Pager）。
+            if (currentRoute == "home" && !showAsk && !showSettings) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.CenterStart)
                         .fillMaxHeight()
-                        .width(28.dp)
+                        .width(36.dp)
                         .zIndex(5f)
                         .edgeGestureStrip(
                             onRight = { showAsk = true },
                             onLeft = {
-                                if (pagerState.currentPage < 5) {
+                                if (pagerState.currentPage < tabs.lastIndex) {
                                     scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
                                 }
                             }
@@ -641,13 +659,14 @@ fun AppRoot(startDest: String) {
                         .background(MaterialTheme.colorScheme.background)
                 ) {
                     com.luyuan.ui.AskScreen(vm = vm, onBack = { showAsk = false })
-                    // 一层抽屉的左缘：再右滑 → 呼出二层设置
+                    // 一层抽屉的左缘：再右滑 → 呼出二层设置（vc89 加宽到 36dp——24dp 起手容错太差，
+                    // 路河两次反馈「再滑进不去设置」）
                     if (!showSettings) {
                         Box(
                             modifier = Modifier
                                 .align(Alignment.CenterStart)
                                 .fillMaxHeight()
-                                .width(24.dp)
+                                .width(36.dp)
                                 .edgeGestureStrip(onRight = { showSettings = true })
                         )
                     }
