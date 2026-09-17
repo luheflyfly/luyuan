@@ -61,7 +61,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.boundsInParent
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -746,10 +745,10 @@ private fun Modifier.edgeGestureStrip(onRight: () -> Unit, onLeft: () -> Unit = 
                         else if (!isRight && totalDx < -60f) onLeft()
                         break
                     }
-                    // vc93：**positionChangeConsumed=false**——positionChange() 默认副作用是把这个位移
+                    // vc93：**纯读坐标差**——别用 positionChange() 读增量，它默认副作用是把这个位移
                     // 标记为「已消费」，Initial pass 观察者每帧读增量会把下层滚动/点按整条手势搞死
                     // （路河真机：笔记页无法滚动/胶囊点不动/左缘带内勾选失效的根因）。只读不毒。
-                    val pc = ch.positionChange(positionChangeConsumed = false)
+                    val pc = ch.position - ch.previousPosition
                     totalDx += pc.x
                     totalDy += pc.y
                     if (!decided) {
@@ -793,10 +792,10 @@ private fun Modifier.swipeRightAnywhere(onOpen: () -> Unit): Modifier =
                     if (taking && totalDx > firePx) onOpen()
                     break
                 }
-                // vc93：**positionChangeConsumed=false**——positionChange() 默认副作用是把这个位移
+                // vc93：**纯读坐标差**——别用 positionChange() 读增量，它默认副作用是把这个位移
                 // 标记为「已消费」，Initial pass 观察者每帧读增量会把下层滚动/点按整条手势搞死
                 // （路河真机：笔记页无法滚动/胶囊点不动/左缘带内勾选失效的根因）。只读不毒。
-                val pc = ch.positionChange(positionChangeConsumed = false)
+                val pc = ch.position - ch.previousPosition
                 totalDx += pc.x
                 totalDy += pc.y
                 if (!decided) {
