@@ -598,8 +598,11 @@ fun AppRoot(startDest: String) {
                         .align(Alignment.BottomCenter)
                         .zIndex(3f)
                         // vc77：.imePadding() 改为 max(ime insets, 实测键盘高) 单源 padding——
-                        // vivo 上 insets 恒 0 时由实测值抬升，输入框不再藏进键盘后（09-11/09-13 两轮老路已证不可信）
-                        .padding(bottom = kbBottomPad)
+                        // vivo 上 insets 恒 0 时由实测值抬升，输入框不再藏进键盘后（09-11/09-13 两轮老路已证不可信）。
+                        // vc91（路河 09-17「抬得太高没挨着键盘」）：本层已坐在底栏上方，键盘高要扣掉
+                        // Scaffold 底栏垫高（pad.bottom≈底栏+系统导航），否则双倍抬高、悬空一个底栏的距离。
+                        // 扣完底边正好贴键盘上沿（QQ/微信输入框口径）；键盘没开满时兜底 0 贴底栏。
+                        .padding(bottom = (kbBottomPad - pad.calculateBottomPadding()).coerceAtLeast(0.dp))
                         .padding(horizontal = 12.dp, vertical = 10.dp)
                         .onGloballyPositioned { coords ->
                             val b = coords.boundsInParent()
@@ -617,12 +620,16 @@ fun AppRoot(startDest: String) {
             // 返回吃掉，手势带形同虚设（vc69 上线以来真机一次没成功过）。切成 5 段、每段
             // ≈170dp（<200dp）段段豁免，手势才真正归我们。
             // 条上左滑离手仍代翻下一页（事件无法转发给 Pager）。
+            // vc91（路河 09-17 口径更正）：要的是「和切页一样的动作」就能唤出设置侧栏，
+            // 不必贴屏幕最左缘——36dp 太窄真机基本摸不到。加宽到 88dp（系统左缘豁免区上限
+            // 130dp 内，安全）；带内纵向/点按一律放行不吞点击滚动，右滑起手在本带=开设置，
+            // 从屏幕中右部右滑仍是 Pager 翻页，两条路互不抢。
             if (currentRoute == "home" && !showAsk && !showSettings) {
                 Column(
                     modifier = Modifier
                         .align(Alignment.CenterStart)
                         .fillMaxHeight()
-                        .width(36.dp)
+                        .width(88.dp)
                         .zIndex(5f)
                 ) {
                     repeat(5) {
