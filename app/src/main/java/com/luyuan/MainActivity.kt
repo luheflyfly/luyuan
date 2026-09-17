@@ -61,6 +61,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.boundsInParent
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -201,16 +202,34 @@ fun AppRoot(startDest: String) {
     val ctx = LocalContext.current
     // 超级输入框 v3（Q13 拍板）：点胶囊向下展开，展开态才有输入框+三按钮；草稿走 prefs
     var expanded by remember { mutableStateOf(false) }
-    // vc94（路河 09-17 方向不变、机制换零触碰）：笔记页右滑开设置侧边栏——不新增任何
-    // 触摸节点，纯旁观 Pager 自己的过滚动量：第一页（左边已无页可翻）向右拉越阈值即触发。
-    LaunchedEffect(pagerState) {
-        androidx.compose.runtime.snapshotFlow {
-            if (pagerState.currentPage == 0) pagerState.currentPageOffsetFraction else 0f
-        }.collect { frac ->
-            if (frac > 0.2f && currentRoute == "home" &&
-                !showSettings && !showAsk && !expanded && !multiSelect
-            ) {
-                showSettings = true
+    // vc95（路河 09-17 深夜拍板：①不要「拉到尽头回弹」，拉就直接出 ②一切触摸覆盖物免谈）：
+    // 「笔记页右滑唤设置侧栏」= nested scroll 纯旁观器——只在 Pager 将要消费拖拽前
+    // 记一笔横向右量，不参与命中测试、一个触摸节点都不新增。第一页右拖累计 >120dp
+    // 直接唤出（手指不用离屏，和切页同一个动作）。vc94 的 fraction 旁观实测无效。
+    val rightFirePx = with(androidx.compose.ui.platform.LocalDensity.current) { 120.dp.toPx() }
+    val rightAccum = remember { floatArrayOf(0f) }
+    val rightSwipeWatch = remember(pagerState, rightFirePx) {
+        object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
+            override fun onPreScroll(
+                available: androidx.compose.ui.geometry.Offset,
+                source: androidx.compose.ui.input.nestedscroll.NestedScrollSource
+            ): androidx.compose.ui.geometry.Offset {
+                if (source == androidx.compose.ui.input.nestedscroll.NestedScrollSource.Drag &&
+                    pagerState.currentPage == 0
+                ) {
+                    if (available.x > 0f && available.x > kotlin.math.abs(available.y)) {
+                        rightAccum[0] += available.x
+                        if (rightAccum[0] > rightFirePx) {
+                            if (!showSettings && !showAsk && !expanded && !multiSelect) {
+                                showSettings = true
+                            }
+                            rightAccum[0] = 0f
+                        }
+                    } else if (available.x < 0f) {
+                        rightAccum[0] = 0f
+                    }
+                }
+                return androidx.compose.ui.geometry.Offset.Zero  // 一律放行，量都留给 Pager
             }
         }
     }
@@ -421,7 +440,7 @@ fun AppRoot(startDest: String) {
                         // 09-14 路河拍板：五页常驻（4）手感最好——翻页永不现场组装；
                         // 整机代价接受（09-14 晨「非常卡」真凶是 widget 日志风暴，已根修，与常驻无关）。
                         beyondBoundsPageCount = 4,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.nestedScroll(rightSwipeWatch).fillMaxSize()
                     ) { page ->
                         // vc87：page=底栏可见序（与 tabs 一一对应）；隐藏页已不在队列，不再有占位提示
                         val slot = tabs[page].first
@@ -627,44 +646,10 @@ fun AppRoot(startDest: String) {
                         }
                 )
             }
-            // 主页【左缘】右滑 → 直接开设置（vc90 · 路河拍板「左缘滑动改成设置」）。
-            // **vc90 根修「左缘滑动从来没唤出来过」**：systemGestureExclusion 的单视图豁免高度
-            // 系统上限 200dp——整条 fillMaxHeight 的豁免申请被系统整体无视，左缘手势全被系统
-            // 返回吃掉，手势带形同虚设（vc69 上线以来真机一次没成功过）。切成 5 段、每段
-            // ≈170dp（<200dp）段段豁免，手势才真正归我们。
-            // 条上左滑离手仍代翻下一页（事件无法转发给 Pager）。
-            // vc91（路河 09-17 口径更正）：要的是「和切页一样的动作」就能唤出设置侧栏，
-            // 不必贴屏幕最左缘——36dp 太窄真机基本摸不到。加宽到 88dp（系统左缘豁免区上限
-            // 130dp 内，安全）；带内纵向/点按一律放行不吞点击滚动，右滑起手在本带=开设置，
-            // 从屏幕中右部右滑仍是 Pager 翻页，两条路互不抢。
-            // vc94（路河 09-17 实测 v1.30.3/1.30.4 笔记/待办/胶囊点按全灭，元凶=这层全屏覆盖物）：
-            // 上块「任意位置右滑」全屏手势层整体拆除——不再挂任何触摸节点；「笔记页右滑开设置侧栏」
-            // 改由下方 LaunchedEffect 纯旁观 Pager 自身过滚动回弹量实现（见 expanded 声明后）。
-            if (currentRoute == "home" && !showAsk && !showSettings) {
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .fillMaxHeight()
-                        .width(88.dp)
-                        .zIndex(5f)
-                ) {
-                    repeat(5) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                                .edgeGestureStrip(
-                                    onRight = { showSettings = true },
-                                    onLeft = {
-                                        if (pagerState.currentPage < tabs.lastIndex) {
-                                            scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
-                                        }
-                                    }
-                                )
-                        )
-                    }
-                }
-            }
+            // vc95（路河 09-17 真机 v1.30.5：待办页「确定/收下/勾」全灭、只有最右×活——被吞的触点
+            // 正好落在左 88dp 带内，和全屏层同病）：一切触摸覆盖物整体拆除。edgeGestureStrip
+            // helper 留着不再引用（warning 无害）。右滑唤设置=上方 rightSwipeWatch 零触碰旁观。
+            // 代价：贴最左缘 ~20dp 起手的右滑可能先触发系统返回手势——罕见场景，不值得为它吞触点。
         }
     }
 
