@@ -35,10 +35,13 @@ object ReminderNotifications {
         )
     }
 
-    fun fire(context: Context, noteId: String, title: String, body: String, channelId: String = CHANNEL_ID) {
+    fun fire(context: Context, noteId: String, title: String, body: String, channelId: String = CHANNEL_ID, tapDetail: Boolean = false) {
         ensureChannel(context)
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            // 2026-09-18 检查批：笔记提醒点通知本体直达该笔记详情（此前只落主页）；
+            // 联系人待办等非笔记件不传 tapDetail，仍落主页
+            if (tapDetail) putExtra("detailId", noteId)
         }
         val pi = PendingIntent.getActivity(
             context, noteId.hashCode(), intent,
@@ -78,7 +81,7 @@ object ReminderNotifications {
 
 /** 到点响铃 + 错过补弹的统一入口 */
 private fun fireReminder(context: Context, note: Note) {
-    ReminderNotifications.fire(context, note.id, "路远提醒", note.text.take(200))
+    ReminderNotifications.fire(context, note.id, "路远提醒", note.text.take(200), tapDetail = true)
     NoteRepository.markReminderFired(context, note.id)
 }
 
@@ -281,7 +284,8 @@ object JournalReminder {
             )
         }
         val pi = PendingIntent.getActivity(
-            context, 2002, Intent(context, MainActivity::class.java),
+            context, 2002,
+            Intent(context, MainActivity::class.java).putExtra("page", "journal"),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val n = NotificationCompat.Builder(context, CHANNEL_ID)

@@ -35,6 +35,7 @@ private val LightColors = lightColorScheme(
 /** colorScheme 装不下的语义色（徽章/分类彩条/渐变），全 App 唯一定义处，禁止页内写死 */
 object LuyuanColors {
     // 绿系（次级强调 / 头像底 / 统计卡渐变）
+    val Green900 = Color(0xFF224A3A)
     val Green700 = Color(0xFF2D5A48)
     val Green500 = Color(0xFF4F8A73)
     val Green100 = Color(0xFFE3ECE6)
@@ -60,6 +61,10 @@ object LuyuanColors {
 
     // 分隔线（强）
     val DividerStrong = Color(0xFFD8D2C0)
+
+    // 暖灰底 / 课务木案金（2026-09-18 检查批收编：此前散落页内写死）
+    val WarmBg = Color(0xFFF6F3EB)
+    val KeiwuGold = Color(0xFFA8843A)
 
     // 深绿渐变（统计卡/下一节卡）
     val GradGreenStart = Color(0xFF2D5A48)

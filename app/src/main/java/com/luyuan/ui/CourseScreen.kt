@@ -164,7 +164,7 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
         if (ok && uri != null && sub.isNotBlank()) {
             val rel = NoteRepository.importImage(context, uri)
             if (rel != null) {
-                NoteRepository.createManual(context, "[$sub] 📷 作业照片", tags = listOf(sub), images = listOf(rel))
+                NoteRepository.createManual(context, "[$sub] 作业照片", tags = listOf(sub), images = listOf(rel))
                 vm.refreshNotes()
                 Toast.makeText(context, "已拍入「$sub」，作业清单里看", Toast.LENGTH_SHORT).show()
             } else {
@@ -343,7 +343,7 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                         color = if (week == curWeek) LuyuanColors.Ink3 else LuyuanColors.Amber,
                         modifier = Modifier
                             .background(
-                                if (week == curWeek) Color(0xFFF6F3EB) else LuyuanColors.AmberBg,
+                                if (week == curWeek) LuyuanColors.WarmBg else LuyuanColors.AmberBg,
                                 RoundedCornerShape(999.dp)
                             )
                             .clickable { week = curWeek }

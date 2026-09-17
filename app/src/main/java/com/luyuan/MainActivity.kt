@@ -297,7 +297,7 @@ fun AppRoot(startDest: String) {
                 val rel = com.luyuan.data.NoteRepository.importImage(ctx, uri)
                 if (rel != null) {
                     com.luyuan.data.NoteRepository.createManual(
-                        ctx, "🖼 图片速记", tags = listOf("分享"), images = listOf(rel)
+                        ctx, "图片速记", tags = listOf("分享"), images = listOf(rel)
                     )
                     expanded = false
                     android.widget.Toast.makeText(ctx, "图片已存入路远", android.widget.Toast.LENGTH_SHORT).show()

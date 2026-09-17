@@ -52,7 +52,7 @@ internal fun keiwuTypeBadgeColor(type: String): Pair<Color, Color> = when (type)
     "评奖" -> LuyuanColors.Amber to LuyuanColors.AmberBg
     "报到" -> LuyuanColors.Blue to LuyuanColors.BlueBg
     "作业" -> LuyuanColors.Purple to LuyuanColors.PurpleBg
-    else -> LuyuanColors.Ink3 to Color(0xFFF6F3EB)
+    else -> LuyuanColors.Ink3 to LuyuanColors.WarmBg
 }
 
 @Composable
@@ -74,9 +74,9 @@ private fun KeiwuOfficialTag() {
         "官方",
         fontSize = 9.sp,
         fontWeight = FontWeight.Bold,
-        color = Color(0xFFA8843A),
+        color = LuyuanColors.KeiwuGold,
         modifier = Modifier
-            .border(1.dp, Color(0xFFA8843A), RoundedCornerShape(3.dp))
+            .border(1.dp, LuyuanColors.KeiwuGold, RoundedCornerShape(3.dp))
             .padding(horizontal = 4.dp, vertical = 1.dp)
     )
 }
@@ -381,8 +381,8 @@ fun LazyListScope.keiwuGradesItems(items: List<KeiwuGrade>) {
     item(key = "gr_warn") {
         Spacer(Modifier.height(8.dp))
         val (txt, fg, bg) = when (st.warning) {
-            "dropout" -> Triple("⛔ 退学警示线（累计不及格≥25学分）", LuyuanColors.Red, LuyuanColors.RedBg)
-            "academic" -> Triple("⚠ 学业警示线（累计不及格≥16学分）", LuyuanColors.Amber, LuyuanColors.AmberBg)
+            "dropout" -> Triple("退学警示线 · 累计不及格≥25学分", LuyuanColors.Red, LuyuanColors.RedBg)
+            "academic" -> Triple("学业警示线 · 累计不及格≥16学分", LuyuanColors.Amber, LuyuanColors.AmberBg)
             else -> Triple("学业正常，继续加油", LuyuanColors.Green700, LuyuanColors.Green100)
         }
         Text(
@@ -444,7 +444,7 @@ fun LazyListScope.keiwuGradesItems(items: List<KeiwuGrade>) {
                         "${fmt2(g.credits)} 学分", fontSize = 10.sp,
                         color = LuyuanColors.Ink3,
                         modifier = Modifier
-                            .background(Color(0xFFF6F3EB), RoundedCornerShape(999.dp))
+                            .background(LuyuanColors.WarmBg, RoundedCornerShape(999.dp))
                             .padding(horizontal = 8.dp, vertical = 3.dp)
                     )
                     Spacer(Modifier.width(6.dp))
@@ -662,7 +662,7 @@ private fun LazyListScope.keiwuZongceCards(ref: KeiwuRefBundle, ledger: List<Kei
             Modifier
                 .fillMaxWidth()
                 .height(7.dp)
-                .background(Color(0xFFF6F3EB), RoundedCornerShape(999.dp))
+                .background(LuyuanColors.WarmBg, RoundedCornerShape(999.dp))
         ) {
             Box(
                 Modifier

@@ -441,7 +441,7 @@ private fun ContactDetailDialog(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Brush.linearGradient(0f to Color(0xFF224A3A), 1f to LuyuanColors.Green700))
+                        .background(Brush.linearGradient(0f to LuyuanColors.Green900, 1f to LuyuanColors.Green700))
                         .padding(horizontal = 18.dp, vertical = 16.dp)
                 ) {
                     IconButton(onClick = onDismiss, modifier = Modifier.align(Alignment.TopEnd)) {

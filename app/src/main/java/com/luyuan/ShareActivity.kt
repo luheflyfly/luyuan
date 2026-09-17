@@ -85,7 +85,7 @@ class ShareActivity : Activity() {
                 if (rels.isEmpty()) {
                     "图片导入失败"
                 } else {
-                    val text = if (rels.size == 1) "🖼 图片速记" else "🖼 图片速记（" + rels.size + " 张）"
+                    val text = if (rels.size == 1) "图片速记" else "图片速记（" + rels.size + " 张）"
                     NoteRepository.createManual(ctx, text, tags = listOf("分享"), images = rels)
                     "已存入路远（" + rels.size + " 张图）"
                 }

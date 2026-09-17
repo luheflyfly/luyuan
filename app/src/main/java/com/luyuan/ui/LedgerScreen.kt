@@ -285,7 +285,7 @@ fun LedgerScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit) {
                                     modifier = Modifier
                                         .weight(1f)
                                         .height(6.dp)
-                                        .background(Color(0xFFF6F3EB), RoundedCornerShape(999.dp))
+                                        .background(LuyuanColors.WarmBg, RoundedCornerShape(999.dp))
                                 ) {
                                     Box(
                                         modifier = Modifier

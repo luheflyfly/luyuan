@@ -124,8 +124,14 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
         val msgItem: Todo? = null
     )
 
-    val now = remember { LocalDateTime.now() }
-    val rows = remember(contacts, msgTodos, pending, excluded) {
+    // 2026-09-18 检查批：now 每 30s 走一次（原 remember 固定在进页时刻，页面久开过期红字不刷新）
+    val now by androidx.compose.runtime.produceState(LocalDateTime.now()) {
+        while (true) {
+            kotlinx.coroutines.delay(30_000)
+            value = LocalDateTime.now()
+        }
+    }
+    val rows = remember(contacts, msgTodos, pending, excluded, now) {
         val out = mutableListOf<Row>()
         for (c in contacts) {
             for (t in c.undoneTodos) {

@@ -104,9 +104,12 @@ class MessageNotificationListener : NotificationListenerService() {
         try {
             ReminderNotifications.ensureChannel(ctx)
             val nm = ctx.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            // 2026-09-18 检查批：点通知本体直达待办页（此前 getLaunchIntentForPackage 只落主页）
+            val tapIntent = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)
+                ?: android.content.Intent(ctx, com.luyuan.MainActivity::class.java)
+            tapIntent.putExtra("page", "todos")
             val tap = android.app.PendingIntent.getActivity(
-                ctx, 0,
-                ctx.packageManager.getLaunchIntentForPackage(ctx.packageName),
+                ctx, 0, tapIntent,
                 android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
             )
             fun pi(action: String, requestCode: Int) = android.app.PendingIntent.getBroadcast(
