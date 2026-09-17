@@ -624,6 +624,20 @@ fun AppRoot(startDest: String) {
             // 不必贴屏幕最左缘——36dp 太窄真机基本摸不到。加宽到 88dp（系统左缘豁免区上限
             // 130dp 内，安全）；带内纵向/点按一律放行不吞点击滚动，右滑起手在本带=开设置，
             // 从屏幕中右部右滑仍是 Pager 翻页，两条路互不抢。
+            // vc92（路河 09-17 拍板定案）：笔记页（Pager 第一页，左边已无页可翻）上
+            // 【屏幕任意位置】左→右滑 = 唤出设置侧边栏——和切页同一个动作，不要求贴边。
+            // 明确横向右滑才接管消费；纵向滚动/点按/左滑翻页一律放行；胶囊展开时不挂
+            // （避免抢输入框里的选字）。左缘最窄 88dp 仍由下方 vc91 带优先处理（带系统豁免）。
+            if (currentRoute == "home" && !showAsk && !showSettings && !expanded && !multiSelect &&
+                pagerState.currentPage == 0
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .zIndex(4f)
+                        .swipeRightAnywhere { showSettings = true }
+                )
+            }
             if (currentRoute == "home" && !showAsk && !showSettings) {
                 Column(
                     modifier = Modifier
@@ -749,3 +763,46 @@ private fun Modifier.edgeGestureStrip(onRight: () -> Unit, onLeft: () -> Unit = 
                 }
             }
         }
+
+/**
+ * vc92：全屏层「左→右滑=唤出设置侧边栏」（仅笔记页挂用，路河 09-17 拍板）。
+ * Initial pass 判定：首段位移明确横向且向右才接管并消费（累计位移 >90dp 离手触发）；
+ * 纵向/左滑/点按立刻放行——列表滚动、Pager 翻页、胶囊点按全部不受影响。
+ */
+private fun Modifier.swipeRightAnywhere(onOpen: () -> Unit): Modifier =
+    pointerInput(Unit) {
+        val firePx = with(density) { 90.dp.toPx() }
+        awaitEachGesture {
+            val down = awaitFirstDown(
+                requireUnconsumed = false,
+                pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial
+            )
+            var totalDx = 0f
+            var totalDy = 0f
+            var decided = false
+            var taking = false
+            while (true) {
+                val ev = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
+                if (!ch.pressed) {
+                    if (taking && totalDx > firePx) onOpen()
+                    break
+                }
+                totalDx += ch.positionChange().x
+                totalDy += ch.positionChange().y
+                if (!decided) {
+                    val adx = kotlin.math.abs(totalDx)
+                    val ady = kotlin.math.abs(totalDy)
+                    if (adx > 16f || ady > 16f) {
+                        decided = true
+                        taking = adx > ady && totalDx > 0f
+                    }
+                }
+                if (taking) {
+                    ch.consume()
+                } else if (decided) {
+                    break
+                }
+            }
+        }
+    }

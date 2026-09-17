@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -28,6 +27,8 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -98,53 +99,46 @@ fun TerminalCapsule(
     ) {
         if (expanded) {
             // ---------- 展开态：输入框（可切搜索）+ 按钮行 ----------
-            // 输入区必须有不透明实底 + 确定的深色文字：路河 09-10 真机反馈「点胶囊打字看不见」，
-            // 根因是文字色依赖主题解析 + 背景半透明叠加，真机对比度不足。此处硬性锁死。
-            val fieldBg = Color(0xFFFFFFFF)
+            // vc92 根修（路河 09-17 真机：「打字不显示，但回车能存」）：裸 BasicTextField 换
+            // M3 OutlinedTextField——全工程真机一直正常的输入框（笔记编辑器/问路远/联系人/加课）
+            // 清一色 OutlinedTextField，胶囊是仅有的两处裸文本布局用法，这台 vivo 对裸路径
+            // 文字层不渲染（字进得去状态、整层空白）。09-10「对比度锁死」口径保留在 colors/textStyle。
+            val fieldColors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = LuyuanColors.Green700,
+                unfocusedBorderColor = Color(0x33224A3A),
+                focusedContainerColor = Color.White,
+                unfocusedContainerColor = Color.White
+            )
             if (searchMode) {
-                BasicTextField(
+                OutlinedTextField(
                     value = searchQuery,
                     onValueChange = onSearchQueryChange,
                     singleLine = true,
+                    placeholder = { Text("搜索笔记…", fontSize = 14.sp, color = LuyuanColors.Ink3) },
                     textStyle = TextStyle(fontSize = 15.5.sp, color = LuyuanColors.Ink1),
                     cursorBrush = SolidColor(LuyuanColors.Green700),
+                    colors = fieldColors,
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 48.dp)
                         .focusRequester(focusReq)
-                        .background(fieldBg, RoundedCornerShape(12.dp))
-                        .padding(horizontal = 12.dp, vertical = 12.dp),
-                    decorationBox = { inner ->
-                        Box(contentAlignment = Alignment.CenterStart) {
-                            if (searchQuery.isEmpty()) {
-                                Text("搜索笔记…", fontSize = 14.sp, color = LuyuanColors.Ink3)
-                            }
-                            inner
-                        }
-                    }
                 )
             } else {
-                BasicTextField(
+                OutlinedTextField(
                     value = inputText,
                     onValueChange = onInputTextChange,
+                    placeholder = { Text("记一笔，回车存笔记；点「日记」存进今天…", fontSize = 14.sp, color = LuyuanColors.Ink3) },
                     textStyle = TextStyle(fontSize = 15.5.sp, color = LuyuanColors.Ink1),
                     cursorBrush = SolidColor(LuyuanColors.Green700),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { onCommitDiary() }),
+                    maxLines = 4,
+                    colors = fieldColors,
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 74.dp)
                         .focusRequester(focusReq)
-                        .background(fieldBg, RoundedCornerShape(12.dp))
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    decorationBox = { inner ->
-                        Box(contentAlignment = Alignment.TopStart) {
-                            if (inputText.isEmpty()) {
-                                Text("记一笔，回车存笔记；点「日记」存进今天…", fontSize = 14.sp, color = LuyuanColors.Ink3)
-                            }
-                            inner
-                        }
-                    }
                 )
             }
             Row(
