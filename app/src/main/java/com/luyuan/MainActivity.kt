@@ -81,6 +81,7 @@ import com.luyuan.ui.DetailEditScreen
 import com.luyuan.ui.JournalScreen
 import com.luyuan.ui.LedgerScreen
 import com.luyuan.ui.LuyuanTheme
+import com.luyuan.ui.AskScreen
 import com.luyuan.ui.LuyuanColors
 import com.luyuan.ui.LuyuanViewModel
 import com.luyuan.ui.NoteListScreen
@@ -610,27 +611,36 @@ fun AppRoot(startDest: String) {
                         }
                 )
             }
-            // 笔记页【左缘】右滑 → 问路远抽屉（left-ia 一层；设置=二层在问路远上再滑）。
-            // vc89：扩到所有主页签 + 加宽（路河 09-16「在笔记页无法从左缘滑出设置」——28dp 起手
-            // 稍偏就命中 Pager 变成切页；36dp 兼顾起手容错与不吞翻页）。
-            // 09-13 夜修「滑动切页不行」：这条覆盖层是 hit-target，压在 Pager 上方——从它起手的
-            // 手势被 hit-test 全部判给它。条上左滑离手时手动翻下一页（事件无法转发给 Pager）。
+            // 主页【左缘】右滑 → 直接开设置（vc90 · 路河拍板「左缘滑动改成设置」）。
+            // **vc90 根修「左缘滑动从来没唤出来过」**：systemGestureExclusion 的单视图豁免高度
+            // 系统上限 200dp——整条 fillMaxHeight 的豁免申请被系统整体无视，左缘手势全被系统
+            // 返回吃掉，手势带形同虚设（vc69 上线以来真机一次没成功过）。切成 5 段、每段
+            // ≈170dp（<200dp）段段豁免，手势才真正归我们。
+            // 条上左滑离手仍代翻下一页（事件无法转发给 Pager）。
             if (currentRoute == "home" && !showAsk && !showSettings) {
-                Box(
+                Column(
                     modifier = Modifier
                         .align(Alignment.CenterStart)
                         .fillMaxHeight()
                         .width(36.dp)
                         .zIndex(5f)
-                        .edgeGestureStrip(
-                            onRight = { showAsk = true },
-                            onLeft = {
-                                if (pagerState.currentPage < tabs.lastIndex) {
-                                    scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
-                                }
-                            }
+                ) {
+                    repeat(5) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .edgeGestureStrip(
+                                    onRight = { showSettings = true },
+                                    onLeft = {
+                                        if (pagerState.currentPage < tabs.lastIndex) {
+                                            scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
+                                        }
+                                    }
+                                )
                         )
-                )
+                    }
+                }
             }
         }
     }
@@ -658,18 +668,8 @@ fun AppRoot(startDest: String) {
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.background)
                 ) {
-                    com.luyuan.ui.AskScreen(vm = vm, onBack = { showAsk = false })
-                    // 一层抽屉的左缘：再右滑 → 呼出二层设置（vc89 加宽到 36dp——24dp 起手容错太差，
-                    // 路河两次反馈「再滑进不去设置」）
-                    if (!showSettings) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.CenterStart)
-                                .fillMaxHeight()
-                                .width(36.dp)
-                                .edgeGestureStrip(onRight = { showSettings = true })
-                        )
-                    }
+                    AskScreen(vm = vm, onBack = { showAsk = false })
+                    // vc90：二层手势条已撤——左缘滑动现在直接开设置（路河拍板），问路远走胶囊/设置入口
                 }
             }
             AnimatedVisibility(
