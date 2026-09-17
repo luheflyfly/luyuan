@@ -201,6 +201,19 @@ fun AppRoot(startDest: String) {
     val ctx = LocalContext.current
     // 超级输入框 v3（Q13 拍板）：点胶囊向下展开，展开态才有输入框+三按钮；草稿走 prefs
     var expanded by remember { mutableStateOf(false) }
+    // vc94（路河 09-17 方向不变、机制换零触碰）：笔记页右滑开设置侧边栏——不新增任何
+    // 触摸节点，纯旁观 Pager 自己的过滚动量：第一页（左边已无页可翻）向右拉越阈值即触发。
+    LaunchedEffect(pagerState) {
+        androidx.compose.runtime.snapshotFlow {
+            if (pagerState.currentPage == 0) pagerState.currentPageOffsetFraction else 0f
+        }.collect { frac ->
+            if (frac > 0.2f && currentRoute == "home" &&
+                !showSettings && !showAsk && !expanded && !multiSelect
+            ) {
+                showSettings = true
+            }
+        }
+    }
     val draftPrefs = remember { ctx.getSharedPreferences("luyuan_prefs", android.content.Context.MODE_PRIVATE) }
     var inputText by remember { mutableStateOf(draftPrefs.getString("terminal_draft", "") ?: "") }
     // 胶囊在根 Box 坐标系里的矩形（用于「点空白收起」判定落点，避免抢胶囊的点击/焦点）
@@ -624,20 +637,9 @@ fun AppRoot(startDest: String) {
             // 不必贴屏幕最左缘——36dp 太窄真机基本摸不到。加宽到 88dp（系统左缘豁免区上限
             // 130dp 内，安全）；带内纵向/点按一律放行不吞点击滚动，右滑起手在本带=开设置，
             // 从屏幕中右部右滑仍是 Pager 翻页，两条路互不抢。
-            // vc92（路河 09-17 拍板定案）：笔记页（Pager 第一页，左边已无页可翻）上
-            // 【屏幕任意位置】左→右滑 = 唤出设置侧边栏——和切页同一个动作，不要求贴边。
-            // 明确横向右滑才接管消费；纵向滚动/点按/左滑翻页一律放行；胶囊展开时不挂
-            // （避免抢输入框里的选字）。左缘最窄 88dp 仍由下方 vc91 带优先处理（带系统豁免）。
-            if (currentRoute == "home" && !showAsk && !showSettings && !expanded && !multiSelect &&
-                pagerState.currentPage == 0
-            ) {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .zIndex(4f)
-                        .swipeRightAnywhere { showSettings = true }
-                )
-            }
+            // vc94（路河 09-17 实测 v1.30.3/1.30.4 笔记/待办/胶囊点按全灭，元凶=这层全屏覆盖物）：
+            // 上块「任意位置右滑」全屏手势层整体拆除——不再挂任何触摸节点；「笔记页右滑开设置侧栏」
+            // 改由下方 LaunchedEffect 纯旁观 Pager 自身过滚动回弹量实现（见 expanded 声明后）。
             if (currentRoute == "home" && !showAsk && !showSettings) {
                 Column(
                     modifier = Modifier
@@ -767,50 +769,3 @@ private fun Modifier.edgeGestureStrip(onRight: () -> Unit, onLeft: () -> Unit = 
                 }
             }
         }
-
-/**
- * vc92：全屏层「左→右滑=唤出设置侧边栏」（仅笔记页挂用，路河 09-17 拍板）。
- * Initial pass 判定：首段位移明确横向且向右才接管并消费（累计位移 >90dp 离手触发）；
- * 纵向/左滑/点按立刻放行——列表滚动、Pager 翻页、胶囊点按全部不受影响。
- */
-private fun Modifier.swipeRightAnywhere(onOpen: () -> Unit): Modifier =
-    pointerInput(Unit) {
-        val firePx = with(density) { 90.dp.toPx() }
-        awaitEachGesture {
-            val down = awaitFirstDown(
-                requireUnconsumed = false,
-                pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial
-            )
-            var totalDx = 0f
-            var totalDy = 0f
-            var decided = false
-            var taking = false
-            while (true) {
-                val ev = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
-                val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
-                if (!ch.pressed) {
-                    if (taking && totalDx > firePx) onOpen()
-                    break
-                }
-                // vc93：**纯读坐标差**——别用 positionChange() 读增量，它默认副作用是把这个位移
-                // 标记为「已消费」，Initial pass 观察者每帧读增量会把下层滚动/点按整条手势搞死
-                // （路河真机：笔记页无法滚动/胶囊点不动/左缘带内勾选失效的根因）。只读不毒。
-                val pc = ch.position - ch.previousPosition
-                totalDx += pc.x
-                totalDy += pc.y
-                if (!decided) {
-                    val adx = kotlin.math.abs(totalDx)
-                    val ady = kotlin.math.abs(totalDy)
-                    if (adx > 16f || ady > 16f) {
-                        decided = true
-                        taking = adx > ady && totalDx > 0f
-                    }
-                }
-                if (taking) {
-                    ch.consume()
-                } else if (decided) {
-                    break
-                }
-            }
-        }
-    }
