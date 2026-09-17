@@ -178,8 +178,6 @@ fun AppRoot(startDest: String) {
     val pagerPageCount = androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(tabs.size) }
     pagerPageCount.intValue = tabs.size
     val pagerState = rememberPagerState(initialPage = 0) { pagerPageCount.intValue }
-    val navInteraction = remember { MutableInteractionSource() }
-    val navScale = rememberPressScale(navInteraction)
     var searchMode by remember { mutableStateOf(false) }
     val searchQuery by vm.searchQuery.collectAsStateWithLifecycle()
     val multiSelect by vm.multiSelect.collectAsStateWithLifecycle()
@@ -339,6 +337,9 @@ fun AppRoot(startDest: String) {
                     // vc87：tabs=底栏可见页（显示顺序=翻页顺序，页数=队列长度）；最右齿轮=设置抽屉不占槽位
                     for ((index, tab) in tabs.withIndex()) {
                         val (slot, label, icon) = tab
+                        // vc93（路河 09-17：「点一个全体闪」根因=所有 tab 共享一个按压源）：逐 tab 独立
+                        val itemInteraction = remember(slot) { MutableInteractionSource() }
+                        val itemScale = rememberPressScale(itemInteraction)
                         NavigationBarItem(
                             selected = pagerState.currentPage == index,
                             onClick = {
@@ -362,8 +363,8 @@ fun AppRoot(startDest: String) {
                                 }
                             },
                             label = { Text(label) },
-                            interactionSource = navInteraction,
-                            modifier = Modifier.graphicsLayer { scaleX = navScale; scaleY = navScale }
+                            interactionSource = itemInteraction,
+                            modifier = Modifier.graphicsLayer { scaleX = itemScale; scaleY = itemScale }
                         )
                     }
                     // 设置：底栏最右齿轮（vc79；开抽屉，不占页面槽位）
@@ -745,8 +746,12 @@ private fun Modifier.edgeGestureStrip(onRight: () -> Unit, onLeft: () -> Unit = 
                         else if (!isRight && totalDx < -60f) onLeft()
                         break
                     }
-                    totalDx += ch.positionChange().x
-                    totalDy += ch.positionChange().y
+                    // vc93：**positionChangeConsumed=false**——positionChange() 默认副作用是把这个位移
+                    // 标记为「已消费」，Initial pass 观察者每帧读增量会把下层滚动/点按整条手势搞死
+                    // （路河真机：笔记页无法滚动/胶囊点不动/左缘带内勾选失效的根因）。只读不毒。
+                    val pc = ch.positionChange(positionChangeConsumed = false)
+                    totalDx += pc.x
+                    totalDy += pc.y
                     if (!decided) {
                         val adx = kotlin.math.abs(totalDx)
                         val ady = kotlin.math.abs(totalDy)
@@ -788,8 +793,12 @@ private fun Modifier.swipeRightAnywhere(onOpen: () -> Unit): Modifier =
                     if (taking && totalDx > firePx) onOpen()
                     break
                 }
-                totalDx += ch.positionChange().x
-                totalDy += ch.positionChange().y
+                // vc93：**positionChangeConsumed=false**——positionChange() 默认副作用是把这个位移
+                // 标记为「已消费」，Initial pass 观察者每帧读增量会把下层滚动/点按整条手势搞死
+                // （路河真机：笔记页无法滚动/胶囊点不动/左缘带内勾选失效的根因）。只读不毒。
+                val pc = ch.positionChange(positionChangeConsumed = false)
+                totalDx += pc.x
+                totalDy += pc.y
                 if (!decided) {
                     val adx = kotlin.math.abs(totalDx)
                     val ady = kotlin.math.abs(totalDy)
