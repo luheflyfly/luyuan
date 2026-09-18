@@ -67,9 +67,10 @@ object MessageTodoExtractor {
         val body = buildString {
             msgs.take(MessageBuffer.MAX_PER_CHAT).forEach { m ->
                 val who = if (m.sender.isNotBlank() && m.sender != m.chat) m.sender else m.chat
-                line("[${fmt.format(java.time.Instant.ofEpochMilli(m.at).atZone(java.time.ZoneId.systemDefault()).toLocalDateTime())}] $who：${m.body.take(200)}")
+                appendLine("[${fmt.format(java.time.Instant.ofEpochMilli(m.at).atZone(java.time.ZoneId.systemDefault()).toLocalDateTime())}] $who：${m.body.take(200)}")
             }
         }
+
 
         val payload = buildJsonObject {
             put("model", "deepseek-v4-flash")
