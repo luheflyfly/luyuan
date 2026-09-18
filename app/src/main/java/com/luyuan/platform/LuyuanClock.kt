@@ -180,8 +180,7 @@ object LuyuanClock {
                 ?: emptyList()
         } catch (_: Exception) { emptyList() }
         for (e in events.take(3)) {
-            sb.append("
-今天：").append(e.name)
+            sb.append("\n今天：").append(e.name)
         }
         val dueSoon = try {
             TodoStore.list(context).filter { t ->
