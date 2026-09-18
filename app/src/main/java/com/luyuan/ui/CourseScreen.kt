@@ -213,9 +213,16 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
     }
 
     // 作业 = 标签里带课程名的笔记（归课约定），最新在前（vc87 拍作业加入，放宽到 12 条）
+    // 2026-09-18 路河反馈：上课记的普通笔记（PC 自动归课打的课程标签）不该落进作业清单——
+    // 只收"作业形态"：标题以 [课程] 开头（记作业/拍作业的程序格式）或标题含「作业」。
+    // 同批修闪退：一篇笔记带两个课程标签时会在两个学科组重复出现，LazyColumn key 撞车直接崩
+    // （crash_log 2026-09-18 12:11 hw_edd5be11 was already used）——分组改为只归"第一个命中的课程"。
     val homework = remember(notes, courseNames) {
         if (courseNames.isEmpty()) emptyList()
-        else notes.filter { n -> n.tags.any { t -> t.isNotBlank() && courseNames.contains(t) } }
+        else notes.filter { n ->
+            val hit = n.tags.any { t -> t.isNotBlank() && courseNames.contains(t) }
+            hit && (n.title.contains("作业") || n.title.startsWith("["))
+        }
             .sortedByDescending { it.updated_at.ifBlank { it.created_at } }
             .take(12)
     }
@@ -621,13 +628,14 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                 if (homework.isEmpty()) {
                     item {
                         Text(
-                            "还没有作业。点「拍作业」拍张照，或记一条带课程标签的笔记，就会出现在这里。",
+                            "还没有作业。点「拍作业」拍张照，或用「记作业」记一条，就会出现在这里。",
                             fontSize = 11.sp, color = LuyuanColors.Ink4
                         )
                     }
                 }
-                val byCourse = courseNames.map { cn -> cn to homework.filter { it.tags.contains(cn) } }
-                    .filter { it.second.isNotEmpty() }
+                val byCourse = courseNames.map { cn ->
+                    cn to homework.filter { n -> n.tags.firstOrNull { courseNames.contains(it) } == cn }
+                }.filter { it.second.isNotEmpty() }
                 for ((cn, list) in byCourse) {
                     item(key = "hw_head_$cn") {
                         val cc = courses.firstOrNull { it.name == cn }?.let { courseColorOf(it) }
