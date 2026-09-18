@@ -221,7 +221,7 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
         if (courseNames.isEmpty()) emptyList()
         else notes.filter { n ->
             val hit = n.tags.any { t -> t.isNotBlank() && courseNames.contains(t) }
-            hit && (n.title.contains("作业") || n.title.startsWith("["))
+            hit && (n.text.contains("作业") || n.text.startsWith("["))
         }
             .sortedByDescending { it.updated_at.ifBlank { it.created_at } }
             .take(12)
