@@ -17,15 +17,13 @@ class TodoActionReceiver : BroadcastReceiver() {
         when (intent.action) {
             ACTION_DONE -> {
                 try {
-                    val done = TodoStore.fromPending(pending).copy(
-                        done = true, done_at = PendingMessageTodoStore.nowIso()
-                    )
-                    TodoStore.write(context, done)
+                    // vc98：入库走 createFromPending（跨库查重防重复）；done 语义不变
+                    TodoStore.createFromPending(context, pending, done = true)
                 } catch (_: Throwable) { }
                 PendingMessageTodoStore.remove(context, id)
             }
             ACTION_KEEP -> {
-                try { TodoStore.write(context, TodoStore.fromPending(pending)) } catch (_: Throwable) { }
+                try { TodoStore.createFromPending(context, pending) } catch (_: Throwable) { }
                 PendingMessageTodoStore.remove(context, id)
             }
             ACTION_DROP -> PendingMessageTodoStore.remove(context, id)

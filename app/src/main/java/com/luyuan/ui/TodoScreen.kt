@@ -66,7 +66,7 @@ import java.time.format.DateTimeFormatter
  * 截止时间 = remind_at（联系人）或 when_text/原文的确定性解析（今天/明天/后天/周X/M月D日/HH:MM…），
  * 解析不出=无期限。到点判断只做展示（红色「已过期」），提醒仍归各自原有管线。
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = false) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -75,18 +75,25 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
     var msgTodos by remember { mutableStateOf(TodoStore.list(context)) }
     var excluded by remember { mutableStateOf(MessageSettings.excludedContacts(context)) }
     var excludeTarget by remember { mutableStateOf<PendingMessageTodo?>(null) }
+    // vc98：列表/时间轴视角切换 + 手机端删除/清空已办（路河拍板三项）
+    var view by remember { mutableStateOf("list") }
+    var deleteTarget by remember { mutableStateOf<Todo?>(null) }
+    var clearDoneOpen by remember { mutableStateOf(false) }
 
     fun reload() {
         // 2026-09-15 治「返回笔记页卡死」：本页动作只局部读盘，不调 vm.refresh()
         pending = PendingMessageTodoStore.list(context)
         msgTodos = TodoStore.list(context)
         excluded = MessageSettings.excludedContacts(context)
+        // vc98：进页补抽满窗缓冲——进程被杀后监听器定时器丢了，靠这条把攒着的消息抽掉
+        com.luyuan.platform.MessageNotificationListener.flushDueNow(context)
     }
     androidx.compose.runtime.LaunchedEffect(Unit) { reload() }
 
     fun keep(p: PendingMessageTodo) {
         try {
-            TodoStore.write(context, TodoStore.fromPending(p))
+            // vc98：入库带跨库查重（同文本未办已存在→不再建第二条）
+            TodoStore.createFromPending(context, p)
         } catch (_: Exception) {
         }
         PendingMessageTodoStore.remove(context, p.id)
@@ -98,10 +105,7 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
     }
     fun completePending(p: PendingMessageTodo) {
         try {
-            val done = TodoStore.fromPending(p).copy(
-                done = true, done_at = PendingMessageTodoStore.nowIso()
-            )
-            TodoStore.write(context, done)
+            TodoStore.createFromPending(context, p, done = true)
         } catch (_: Exception) {
         }
         PendingMessageTodoStore.remove(context, p.id)
@@ -109,8 +113,16 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
     }
     fun toggleMsg(t: Todo) {
         try {
-            val now = PendingMessageTodoStore.nowIso()
-            TodoStore.write(context, t.copy(done = !t.done, done_at = if (!t.done) now else null))
+            // vc98：fresh 读盘后只改完成态写回——旧写法拿页面旧副本整文件覆盖，会把 PC 侧同步来的改动冲掉
+            TodoStore.setDone(context, t.id, !t.done)
+        } catch (_: Exception) {
+        }
+        reload()
+    }
+    fun deleteMsg(t: Todo) {
+        try {
+            // vc98：手机端删除=软删墓碑（deleted:true 同步回 PC，双端列表都过滤）
+            TodoStore.deleteSoft(context, t.id)
         } catch (_: Exception) {
         }
         reload()
@@ -152,8 +164,9 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
             out.add(
                 Row(
                     key = "msg_${t.id}", text = t.text, who = t.who.ifBlank { t.sender },
-                    score = deadlineScore(t.when_text, "", t.created_at, now),
-                    dueLabel = dueLabel("", t.when_text, now),
+                    // vc98：due_at（绝对截止）优先，when_text 原文兜底
+                    score = deadlineScore(t.due_at, t.when_text, t.created_at, now),
+                    dueLabel = dueLabel(t.due_at.takeIf { it.isNotBlank() }, t.when_text, now),
                     origin = if (t.device == "pc") "电脑" else "消息", // PC msgdigest 同步件标注
                     msgItem = t
                 )
@@ -165,8 +178,8 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
             out.add(
                 Row(
                     key = "p_${p.id}", text = p.text, who = p.sender.ifBlank { p.who },
-                    score = deadlineScore(p.whenText, "", p.created_at, now),
-                    dueLabel = dueLabel("", p.whenText, now), origin = "消息",
+                    score = deadlineScore(p.dueIso, p.whenText, p.created_at, now),
+                    dueLabel = dueLabel(p.dueIso.takeIf { it.isNotBlank() }, p.whenText, now), origin = "消息",
                     isPending = true, pendingItem = p
                 )
             )
@@ -205,12 +218,26 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
             )
         }
     ) { pad ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(pad)
+        ) {
+            // vc98：列表 / 时间轴视角（时间轴=截止日期小页，路河拍板）
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 2.dp)
+            ) {
+                SegChip("列表", view == "list") { view = "list" }
+                Spacer(Modifier.width(8.dp))
+                SegChip("时间轴", view == "timeline") { view = "timeline" }
+            }
+            if (view == "list") {
         LazyColumn(
             contentPadding = PaddingValues(bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
                 .fillMaxSize()
-                .padding(pad)
                 .padding(horizontal = 14.dp)
         ) {
             item(key = "sec_open") {
@@ -274,12 +301,18 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
                             onExclude = { excludeTarget = r.pendingItem }
                         )
                     } else {
-                        // ---------- 正式待办（绿圈勾选完成） ----------
+                        // ---------- 正式待办（绿圈勾选完成；长按=删除，vc98） ----------
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(14.dp))
+                                .then(
+                                    if (r.key.startsWith("msg_")) Modifier.combinedClickable(
+                                        onClick = {},
+                                        onLongClick = { r.msgItem?.let { deleteTarget = it } }
+                                    ) else Modifier
+                                )
                                 .padding(horizontal = 12.dp, vertical = 10.dp)
                         ) {
                             Box(
@@ -319,14 +352,23 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
                     }
                 }
             }
-            // ---------- 已办（done 的消息待办；可点取消） ----------
+            // ---------- 已办（done 的消息待办；可点取消；vc98 加清空） ----------
             if (doneMsgs.isNotEmpty()) {
                 item(key = "sec_done") {
-                    Text(
-                        "已办 ${doneMsgs.size}",
-                        fontWeight = FontWeight.ExtraBold, color = LuyuanColors.Ink3, fontSize = 13.sp,
-                        modifier = Modifier.padding(top = 14.dp, bottom = 2.dp)
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "已办 ${doneMsgs.size}",
+                            fontWeight = FontWeight.ExtraBold, color = LuyuanColors.Ink3, fontSize = 13.sp,
+                            modifier = Modifier.padding(top = 14.dp, bottom = 2.dp)
+                        )
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            "清空已办", fontSize = 11.sp, color = LuyuanColors.Ink4,
+                            modifier = Modifier
+                                .padding(top = 14.dp, bottom = 2.dp)
+                                .clickable { clearDoneOpen = true }
+                        )
+                    }
                 }
                 for (t in doneMsgs) {
                     item(key = "done_${t.id}") {
@@ -354,6 +396,24 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
                 }
             }
         }
+        } else {
+            // vc98：时间轴小页（路河拍板）——未办按截止日分桶：逾期→今天→明天→…→无期限
+                TimelineView(
+                    trows = rows.map {
+                        TRow(it.key, it.text, it.who, it.score, it.dueLabel, it.origin, it.isPending)
+                    },
+                    now = now,
+                    onToggle = { key ->
+                        if (key.startsWith("msg_")) {
+                            msgTodos.firstOrNull { it.id == key.removePrefix("msg_") }?.let { toggleMsg(it) }
+                        } else {
+                            val parts = key.removePrefix("ct_").split("_", limit = 2)
+                            if (parts.size == 2) { vm.toggleContactTodo(parts[0], parts[1]); reload() }
+                        }
+                    }
+                )
+            }
+        }
     }
 
     // ---------- 长按待确认卡：「把 X 加入不计入待办」 ----------
@@ -379,6 +439,46 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
             dismissButton = {
                 TextButton(onClick = { excludeTarget = null }) { Text("取消") }
             }
+        )
+    }
+
+    // ---------- vc98：长按正式待办 = 删除（软删墓碑，双端消失） ----------
+    deleteTarget?.let { t ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("删除这条待办？", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+            text = {
+                Text(
+                    "「${t.text.take(24)}」将标记删除，电脑端同步消失；不影响其他待办。",
+                    fontSize = 13.sp
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { deleteMsg(t); deleteTarget = null }) {
+                    Text("删除", color = LuyuanColors.Red, fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("取消") } }
+        )
+    }
+
+    // ---------- vc98：清空已办（已办 36 条堆积的出口；墓碑同步双端） ----------
+    if (clearDoneOpen) {
+        AlertDialog(
+            onDismissRequest = { clearDoneOpen = false },
+            title = { Text("清空已办 ${doneMsgs.size} 条？", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+            text = { Text("已完成且不用留底的待办将标记删除，电脑端同步消失。", fontSize = 13.sp) },
+            confirmButton = {
+                TextButton(onClick = {
+                    try {
+                        TodoStore.clearDone(context)
+                    } catch (_: Exception) {
+                    }
+                    clearDoneOpen = false
+                    reload()
+                }) { Text("清空", color = LuyuanColors.Red, fontWeight = FontWeight.SemiBold) }
+            },
+            dismissButton = { TextButton(onClick = { clearDoneOpen = false }) { Text("取消") } }
         )
     }
 }
@@ -452,6 +552,159 @@ private fun PendingTodoRow(
                 .clickable(onClick = onKeep)
                 .padding(horizontal = 12.dp, vertical = 4.dp)
         )
+    }
+}
+
+// ---------- vc98：时间轴小页（路河拍板「截止日期单开一个小页做类似时间轴」） ----------
+
+/** 时间轴行渲染用的轻量结构（Row 是 TodoScreen 内部类，跨 composable 传递用这份影子） */
+private data class TRow(
+    val key: String, val text: String, val who: String,
+    val score: Long, val dueLabel: String, val origin: String,
+    val isPending: Boolean
+)
+
+/** 列表/时间轴切换胶囊（设计 token：选中=Green50 底+Green700 字） */
+@Composable
+private fun SegChip(label: String, active: Boolean, onClick: () -> Unit) {
+    Text(
+        label,
+        fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+        color = if (active) LuyuanColors.Green700 else LuyuanColors.Ink4,
+        modifier = Modifier
+            .background(if (active) LuyuanColors.Green50 else Color.Transparent, RoundedCornerShape(999.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 5.dp)
+    )
+}
+
+/** 时间轴主视图：未办按截止日分桶（逾期→今天→明天→后天→M/d→无期限），桶头=轴点+日期线 */
+@Composable
+private fun TimelineView(trows: List<TRow>, now: LocalDateTime, onToggle: (String) -> Unit) {
+    val buckets = remember(trows, now) {
+        val today = now.toLocalDate()
+        val out = linkedMapOf<String, MutableList<TRow>>()
+        for (r in trows.sortedBy { it.score }) {
+            val label = if (r.score == Long.MAX_VALUE) "无期限"
+            else {
+                val d = java.time.Instant.ofEpochMilli(r.score)
+                    .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                when {
+                    d.isBefore(today) -> "逾期 ${d.monthValue}/${d.dayOfMonth}"
+                    d == today -> "今天"
+                    d == today.plusDays(1) -> "明天"
+                    d == today.plusDays(2) -> "后天"
+                    else -> "${d.monthValue}/${d.dayOfMonth}"
+                }
+            }
+            out.getOrPut(label) { mutableListOf() }.add(r)
+        }
+        out
+    }
+    LazyColumn(
+        contentPadding = PaddingValues(bottom = 96.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 14.dp)
+    ) {
+        if (buckets.isEmpty()) {
+            item(key = "tl_empty") {
+                Text(
+                    "时间轴空空的。列表里没有未办待办时这里也没内容。",
+                    fontSize = 12.sp, color = LuyuanColors.Ink4,
+                    modifier = Modifier.padding(top = 24.dp)
+                )
+            }
+        }
+        for ((label, items) in buckets) {
+            item(key = "tl_sec_$label") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier
+                            .size(10.dp)
+                            .background(
+                                if (label.startsWith("逾期")) LuyuanColors.Red else LuyuanColors.Green700,
+                                CircleShape
+                            )
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "$label · ${items.size} 件",
+                        fontWeight = FontWeight.ExtraBold, fontSize = 13.sp, color = LuyuanColors.Ink2
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .height(1.dp)
+                            .background(LuyuanColors.Green100)
+                    )
+                }
+            }
+            for (r in items) {
+                item(key = "tl_${r.key}") {
+                    TimelineRow(r, onToggle)
+                }
+            }
+        }
+    }
+}
+
+/** 时间轴单行：左侧时刻、中间轴点、右侧内容卡（待确认=琥珀点无勾选；正式=可勾） */
+@Composable
+private fun TimelineRow(r: TRow, onToggle: (String) -> Unit) {
+    val time = if (r.score == Long.MAX_VALUE) "—"
+    else {
+        val d = java.time.Instant.ofEpochMilli(r.score)
+            .atZone(java.time.ZoneId.systemDefault()).toLocalDateTime()
+        if (r.dueLabel.contains(":")) String.format("%02d:%02d", d.hour, d.minute)
+        else "${d.monthValue}/${d.dayOfMonth}"
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            time, fontSize = 10.sp, color = LuyuanColors.Ink4,
+            modifier = Modifier.width(36.dp)
+        )
+        if (r.isPending) {
+            Box(
+                Modifier
+                    .padding(horizontal = 7.dp)
+                    .size(8.dp)
+                    .background(LuyuanColors.Amber, CircleShape)
+            )
+        } else {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .padding(horizontal = 0.dp)
+                    .size(22.dp)
+                    .border(1.6.dp, LuyuanColors.Green700, CircleShape)
+                    .clickable { onToggle(r.key) }
+            ) {
+                Icon(
+                    Icons.Default.Check, "完成",
+                    tint = LuyuanColors.Green700, modifier = Modifier.size(13.dp)
+                )
+            }
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                r.text, fontSize = 12.5.sp, color = LuyuanColors.Ink1,
+                maxLines = 2, overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                (r.who + " · " + r.origin).trim(' ', '·'),
+                fontSize = 9.5.sp, color = LuyuanColors.Ink4,
+                maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
+        }
+        if (r.isPending) {
+            Text(
+                "待确认", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = LuyuanColors.Amber
+            )
+        }
     }
 }
 

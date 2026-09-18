@@ -21,6 +21,7 @@ data class PendingMessageTodo(
     val text: String,            // 要办的事（模型抽取）
     val who: String = "",        // 谁说的（模型抽取，可空）
     val whenText: String = "",   // 时间描述（模型抽取，原文，可空）
+    val dueIso: String = "",     // vc98：截止绝对时间 ISO8601（窗口抽取时由模型锚定当前时间算出，可空）
     val raw: String = "",        // 原始消息（给用户核对，必要）
     val source: String = "",     // "wechat" | "qq"
     val sender: String = "",     // 通知里的发送者
@@ -44,8 +45,9 @@ object PendingMessageTodoStore {
     fun add(ctx: Context, p: PendingMessageTodo) {
         try {
             val cur = runCatching { list(ctx) }.getOrDefault(emptyList())
-            // 同一条消息重复抽取保护（监听器已做粗去重，这里再兜一层：同原文同发送者不重复入队）
-            if (cur.any { it.raw == p.raw && it.sender == p.sender }) return
+            // 同一条任务重复抽取保护（vc98 起查重键=text+sender：同窗多任务共用原文摘录，
+            // 旧 raw+sender 键会把同窗第二条任务误杀）
+            if (cur.any { it.text == p.text && it.sender == p.sender }) return
             // 队列上限 50 条，防止长期不确认堆积把文件撑大
             val next = (cur + p).takeLast(50)
             file(ctx).writeText(

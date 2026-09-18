@@ -10,14 +10,17 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import java.net.HttpURLConnection
 import java.net.URL
+import java.time.OffsetDateTime
+import java.time.format.DateTimeFormatter
 
 /**
- * 「消息待办」云端抽取（立项单 T2）：把一条命中信号词的消息原文交给 DeepSeek，
- * 抽成结构化待办。复用 AskRemote 的 Key / baseUrl（同一套配置，零新增依赖）。
+ * 「消息待办」云端抽取（立项单 T2；vc98 路河拍板改为窗口版）：
+ * 不再逐条消息判定——把同聊天的 5 分钟消息窗（带发送者/时间）整体交给 DeepSeek，
+ * 以任务为单位输出：合并重复、丢弃寒暄与缺上下文的碎片、截止时间直接算成 ISO 绝对时间。
  *
  * 铁律：
  * - 输出**严格 JSON**，解析失败即丢弃（绝不猜、绝不编）
- * - 失败静默降级：无网 / 无 Key / 余额不足 / 超时 → 返回 null，不崩不弹错
+ * - 失败静默降级：无网 / 无 Key / 余额不足 / 超时 → 返回空列表，不崩不弹错
  * - 模型固定 deepseek-v4-flash + thinking disabled（省钱、够用、快）
  */
 object MessageTodoExtractor {
@@ -25,57 +28,68 @@ object MessageTodoExtractor {
     const val PKG_WECHAT = "com.tencent.mm"
     const val PKG_QQ = "com.tencent.mobileqq"
 
-    /** 抽取结果（模型给的四个字段，全部可空；text 空 = 判定为无事要办） */
-    data class Extracted(val text: String, val who: String, val whenText: String)
+    /** 抽取结果（due_iso = 锚定抽取时刻的绝对时间；空 = 没有可识别截止） */
+    data class Extracted(val text: String, val who: String, val whenText: String, val dueIso: String)
 
     private val json = Json { ignoreUnknownKeys = true }
 
     private const val TIMEOUT_CONNECT = 10_000
     private const val TIMEOUT_READ = 25_000
 
-    private const val SYSTEM_PROMPT = """你是路远的待办抽取器。用户会给你一条从聊天软件收到的消息。
-你的任务：判断这条消息里有没有「需要手机主人去做的事」，如果有，抽成 JSON。
+    private const val SYSTEM_PROMPT = """你是路河的待办整理员。给你一个聊天窗口最近几分钟的消息（按时间顺序，可能多人发言）。找出其中【需要手机主人路河去做的事】，以任务为单位整理输出。
 
 只输出一个 JSON 对象，不要任何解释、不要 markdown 代码块。格式：
-{"has_todo": true/false, "text": "要办的事（简短陈述句，保留时间/物品等关键信息，不要加自己的推测）", "who": "谁说的（消息里能看出才填，看不出留空字符串）", "when": "时间描述的原文（如'明天下午三点'，没有留空字符串）"}
+{"tasks":[{"text":"要办的事","who":"谁安排的/相关的（看得出才填，否则空字符串）","when_text":"时间描述的原文（没有填空字符串）","due_iso":"截止的绝对时间（没有填空字符串）"}]}
 
-判断原则（宁可漏，不可错）：
-- 有事要办 → has_todo=true。例："明天下午三点提醒我交材料" → text="明天下午三点要交材料"
-- 闲聊/表情/问候/通知类（如"哈哈哈哈"、"收到"、"在吗"、"你的快递已到"）→ has_todo=false
-- 不要脑补：消息里没说的信息绝不添加；广告、群公告类一律 has_todo=false
-- text 里不要出现"提醒我"这种转述口吻，直接说要办的事"""
+整理规则：
+- 以任务为单位：同一件事被多条消息/多个人反复说，合并成一条输出，绝不重复。
+- 闲聊、寒暄、"收到/好的/哈哈"、表情、接龙计数、纯通知无需行动的 → 不输出。
+- 缺了上下文就做不了的不要输出：只说"发一下""出来填""改一下"而窗口里看不出发什么/填什么/改什么 → 不输出（等上下文齐的那一轮再整理）。
+- text 直接说要办的事，不要"提醒我"这类转述腔，保留时间/地点/数量等关键信息，不加自己的推测。
+- due_iso：把时间描述相对【当前时间】算成绝对时间，ISO8601 格式如 2026-09-18T15:00:00+08:00（"明天下午三点"→明天15:00；"周五前"→周五23:59）；相对时间算不出或没有时间 → 空字符串。
+- 没有要办的事 → {"tasks":[]}"""
 
     /**
-     * 抽取一条消息。命中待办返回 Extracted；判定无事要办、或任何失败 → null。
-     * 调用方负责已做信号词粗筛与外发计数。
+     * 抽取一个聊天窗口。返回任务列表（空 = 窗口里没有要办的事）；**null = 抽取失败**
+     * （无网/无 Key/HTTP 错/解析崩）——调用方应把窗口放回缓冲等下次触发重试，别把消息丢了。
      */
-    fun extract(context: Context, sender: String, text: String, source: String): Extracted? {
+    fun extractWindow(context: Context, chat: String, msgs: List<BufferedMessage>): List<Extracted>? {
+        if (msgs.isEmpty()) return emptyList()
         val cfg = try {
             AskRemote.loadConfig(context)
         } catch (_: Exception) {
             return null
         }
-        if (!cfg.ready) return null // 没填 Key：静默不处理
+        if (!cfg.ready) return null // 没填 Key：不算"没待办"，算失败（回头补抽）
+
+        val now = OffsetDateTime.now()
+        val fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+        val body = buildString {
+            msgs.take(MessageBuffer.MAX_PER_CHAT).forEach { m ->
+                val who = if (m.sender.isNotBlank() && m.sender != m.chat) m.sender else m.chat
+                line("[${fmt.format(java.time.Instant.ofEpochMilli(m.at).atZone(java.time.ZoneId.systemDefault()).toLocalDateTime())}] $who：${m.body.take(200)}")
+            }
+        }
+
+        val payload = buildJsonObject {
+            put("model", "deepseek-v4-flash")
+            put("messages", buildJsonArray {
+                add(buildJsonObject {
+                    put("role", "system")
+                    put("content", SYSTEM_PROMPT)
+                })
+                add(buildJsonObject {
+                    put("role", "user")
+                    put("content", "聊天：$chat\n当前时间：${fmt.format(now)}\n\n消息：\n$body")
+                })
+            })
+            // v4 系默认思考开启，抽取任务显式关掉（省钱且更快）
+            put("thinking", buildJsonObject { put("type", "disabled") })
+            put("temperature", 0.1)
+            put("max_tokens", 800)
+        }
 
         return try {
-            val payload = buildJsonObject {
-                put("model", "deepseek-v4-flash")
-                put("messages", buildJsonArray {
-                    add(buildJsonObject {
-                        put("role", "system")
-                        put("content", SYSTEM_PROMPT)
-                    })
-                    add(buildJsonObject {
-                        put("role", "user")
-                        put("content", "来源：$source\n发送者：$sender\n消息：$text")
-                    })
-                })
-                // v4 系默认思考开启，抽取任务显式关掉（省钱且更快）
-                put("thinking", buildJsonObject { put("type", "disabled") })
-                put("temperature", 0.1)
-                put("max_tokens", 400)
-            }
-
             val conn = URL(cfg.baseUrl + "/chat/completions").openConnection() as HttpURLConnection
             try {
                 conn.requestMethod = "POST"
@@ -85,12 +99,12 @@ object MessageTodoExtractor {
                 conn.setRequestProperty("Content-Type", "application/json")
                 conn.setRequestProperty("Authorization", "Bearer " + cfg.key)
                 conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
-                // 每发一条就计一次外发（无论解析成败，原文确实出网了）——隐私计数必须诚实
+                // 整窗出网一次计一次（原文确实出网了）——隐私计数必须诚实
                 MessageSettings.bumpSent(context)
                 val code = conn.responseCode
-                if (code !in 200..299) return null // 401/402/429 等一律静默（记账那套 humanError 是给交互用的）
-                val body = conn.inputStream?.bufferedReader()?.readText().orEmpty()
-                parseReply(body)
+                if (code !in 200..299) return null // 401/402/429 等一律静默
+                val resp = conn.inputStream?.bufferedReader()?.readText().orEmpty()
+                parseReply(resp) ?: emptyList()   // 解析崩=失败（null）；解析成但没任务=空
             } finally {
                 conn.disconnect()
             }
@@ -99,8 +113,8 @@ object MessageTodoExtractor {
         }
     }
 
-    /** 从模型回复里抠出 JSON 并校验；任何不合规 → null（块体：内部有 return，表达式体编译不过） */
-    private fun parseReply(body: String): Extracted? {
+    /** 从模型回复里抠出 JSON 并校验；结构坏/不合规 → null（失败）；合规但 tasks 空 → 空列表 */
+    private fun parseReply(body: String): List<Extracted>? {
         return try {
             val root = json.parseToJsonElement(body).jsonObject
             val content = root["choices"]?.jsonArray?.firstOrNull()
@@ -111,21 +125,31 @@ object MessageTodoExtractor {
             val e = content.lastIndexOf('}')
             if (s < 0 || e <= s) return null
             val obj = json.parseToJsonElement(content.substring(s, e + 1)).jsonObject
+            val arr = obj["tasks"]?.jsonArray ?: return null
 
-            val has = obj["has_todo"]?.jsonPrimitive?.content?.trim()?.lowercase()
-            val isTodo = has == "true" || has == "1"
-            if (!isTodo) return null
-
-            val text = obj["text"]?.jsonPrimitive?.content?.trim().orEmpty()
-            if (text.isEmpty()) return null
-            // 防幻觉：事情描述不能是空壳；长度兜底（模型抽风时输出超长文本）
-            if (text.length > 200) return null
-
-            Extracted(
-                text = text,
-                who = obj["who"]?.jsonPrimitive?.content?.trim().orEmpty().take(20),
-                whenText = obj["when"]?.jsonPrimitive?.content?.trim().orEmpty().take(40)
-            )
+            val out = mutableListOf<Extracted>()
+            for (t in arr) {
+                try {
+                    val o = t.jsonObject
+                    val text = o["text"]?.jsonPrimitive?.content?.trim().orEmpty()
+                    if (text.isEmpty()) continue
+                    // 防幻觉：事情描述不能是空壳；长度兜底（模型抽风时输出超长文本）
+                    if (text.length > 200) continue
+                    // 去重（模型偶尔仍输出重复项）：同 text 只留一条
+                    if (out.any { it.text == text }) continue
+                    out.add(
+                        Extracted(
+                            text = text,
+                            who = o["who"]?.jsonPrimitive?.content?.trim().orEmpty().take(20),
+                            whenText = o["when_text"]?.jsonPrimitive?.content?.trim().orEmpty().take(40),
+                            dueIso = o["due_iso"]?.jsonPrimitive?.content?.trim().orEmpty().take(40)
+                        )
+                    )
+                    if (out.size >= 8) break   // 单窗任务上限（正常 0~3 条）
+                } catch (_: Exception) {
+                }
+            }
+            out
         } catch (_: Exception) {
             null
         }
