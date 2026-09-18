@@ -148,8 +148,9 @@ internal fun buildPeriods(
 internal fun loadPeriodOverrides(prefs: android.content.SharedPreferences): Map<Int, String> {
     val raw = prefs.getString("keiwu_period_overrides", null) ?: return emptyMap()
     val out = mutableMapOf<Int, String>()
-    Regex("\"(\d+)\"\s*:\s*\"([^\"]+)\"").findAll(raw).forEach {
-        it.groupValues[1].toIntOrNull()?.let { no -> out[no] = it.groupValues[2] }
+    for (m in Regex("[0-9]+[ ]*:[ ]*\"[^\"]+\"").findAll(raw)) {
+        val no = m.value.takeWhile { ch -> ch.isDigit() }.toIntOrNull() ?: continue
+        out[no] = m.value.substringAfter('"').substringBefore('"')
     }
     return out
 }
