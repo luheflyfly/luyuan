@@ -217,9 +217,10 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
         if (ok && uri != null && sub.isNotBlank()) {
             val rel = NoteRepository.importImage(context, uri)
             if (rel != null) {
-                NoteRepository.createManual(context, "[$sub] 作业照片", tags = listOf(sub), images = listOf(rel))
+                // vc102：占位符=PC transwatch 的 OCR 队列标记，识别完成后自动替换为纸上文字
+                NoteRepository.createManual(context, "[$sub] （作业照片待识别）", tags = listOf(sub), images = listOf(rel))
                 vm.refreshNotes()
-                Toast.makeText(context, "已拍入「$sub」，作业清单里看", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "已拍入「$sub」，照片文字稍后自动回填", Toast.LENGTH_SHORT).show()
             } else {
                 Toast.makeText(context, "照片没存上，再试一次", Toast.LENGTH_SHORT).show()
             }
