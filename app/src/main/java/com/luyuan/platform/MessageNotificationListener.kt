@@ -100,6 +100,16 @@ class MessageNotificationListener : NotificationListenerService() {
         flushHandler.postDelayed(flushRunnable, delay)
     }
 
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        // vc100 防漏补漏：进程被系统杀掉重启后，Handler 定时器已丢——缓冲里攒着的消息会一直
+        // 睡到下一条通知或打开待办页才被抽。重连即补排程（满窗的 2 秒内冲掉，没满的续约计时）。
+        try {
+            scheduleFlush()
+        } catch (_: Throwable) {
+        }
+    }
+
     private val flushRunnable = Runnable {
         if (MessageBuffer.due(this) || MessageBuffer.anyChatFull(this)) {
             flushNow(this)
