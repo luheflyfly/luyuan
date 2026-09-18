@@ -4,6 +4,7 @@ package com.luyuan.data
 object StickerCatalog {
     data class Pack(val id: String, val label: String, val stickers: List<String>)
 
+    // vc103：去重——fluent-emoji 包内 "cat-face" 曾出现两次，LazyVerticalGrid key 撞车直接崩
     val packs = listOf(
         Pack("fluent-emoji", "Fluent 3D", listOf(
             "angry-face", "angry-face-with-horns", "anguished-face", "anxious-face-with-sweat",
@@ -51,5 +52,5 @@ object StickerCatalog {
             "butterfly", "camel", "cherry-blossom", "chicken",
             "crab", "deer", "dolphin", "duck",
         )),
-    )
+    ).map { p -> p.copy(stickers = p.stickers.distinct()) }
 }

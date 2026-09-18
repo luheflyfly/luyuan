@@ -812,7 +812,7 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                         }
                     }
                     for (n in list) {
-                    item(key = "hw_${n.id}") {
+                    item(key = "hw_${cn}_${n.id}") {   // vc103：组前缀防撞（crash_log 实锤）
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier

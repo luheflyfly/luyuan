@@ -178,6 +178,7 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             ReminderScheduler.rescheduleAll(ctx)
             JournalReminder.reschedule(ctx)
+            com.luyuan.platform.LuyuanClock.rescheduleAll(ctx)   // vc103：课程提醒/Widget保活/晨间简报
         }
     }
 

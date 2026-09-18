@@ -219,6 +219,7 @@ class BootReceiver : BroadcastReceiver() {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
             ReminderScheduler.rescheduleAll(context)
             JournalReminder.reschedule(context)
+            LuyuanClock.rescheduleAll(context)   // vc103：课程提醒/Widget保活/晨间简报
         }
     }
 }

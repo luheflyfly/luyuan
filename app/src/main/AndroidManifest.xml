@@ -176,6 +176,11 @@
                 android:resource="@xml/volume_service_config" />
         </service>
 
+        <!-- vc103 路远时钟：上课前提醒 / Widget 保活刷新 / 晨间简报 -->
+        <receiver
+            android:name=".platform.ClockReceiver"
+            android:exported="false" />
+
         <!-- vc87 拍作业：FileProvider 供系统相机写入 cache/camera/ 临时文件（拍照后压缩进同步目录 images/） -->
         <provider
             android:name="androidx.core.content.FileProvider"
