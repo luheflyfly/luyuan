@@ -173,6 +173,16 @@ object LuyuanClock {
             }
             if (todays.size > 4) sb.append("\n…等共 ").append(todays.size).append(" 节")
         }
+        // vc105：今日校历事件（考试/评奖等，来自 PC 课务导出）
+        val events = try {
+            com.luyuan.data.KeiwuStore.events(context)?.items
+                ?.filter { !it.deleted && it.date.take(10) == today.toString() }
+                ?: emptyList()
+        } catch (_: Exception) { emptyList() }
+        for (e in events.take(3)) {
+            sb.append("
+今天：").append(e.name)
+        }
         val dueSoon = try {
             TodoStore.list(context).filter { t ->
                 !t.done && !t.deleted && t.when_text.trim().length >= 10 &&
