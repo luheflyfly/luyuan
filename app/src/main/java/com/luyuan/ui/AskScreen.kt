@@ -8,6 +8,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -97,6 +98,8 @@ fun AskScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
     var includePrivate by remember { mutableStateOf(false) }
     // vc88：回答可一键存成笔记（防重复按会话内下标记）
     val savedTurns = remember { mutableStateListOf<Int>() }
+    // vc104：存笔记时可选学科（默认=问路远，也可归到某门课）
+    var pendingSave by remember { mutableStateOf<Int?>(null) }
 
     data class PendingImg(val bmp: Bitmap, val dataUrl: String)
     val pending = remember { mutableStateListOf<PendingImg>() }
@@ -301,23 +304,7 @@ fun AskScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
                                     color = if (saved) LuyuanColors.Ink4 else LuyuanColors.Green700,
                                     modifier = Modifier
                                         .padding(start = 6.dp, top = 3.dp)
-                                        .clickable(enabled = !saved) {
-                                            try {
-                                                NoteRepository.createManual(
-                                                    context, m.content, tags = listOf("问路远")
-                                                )
-                                                savedTurns.add(idx)
-                                                Toast.makeText(
-                                                    context, "已存进笔记（标签：问路远）",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                            } catch (e: Exception) {
-                                                Toast.makeText(
-                                                    context, "没存上：" + (e.message ?: ""),
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                            }
-                                        }
+                                        .clickable(enabled = !saved) { pendingSave = idx }
                                 )
                             }
                         }
@@ -466,6 +453,30 @@ fun AskScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
         )
     }
 
+    // ---------- vc104 存笔记 · 选标签（问路远 / 某门课） ----------
+    pendingSave?.let { idx ->
+        if (idx >= messages.size) {
+            pendingSave = null
+        } else {
+            SaveNoteDialog(
+                courseNames = (vm.courses.value).map { it.name }
+                    .filter { it.isNotBlank() }.distinct().take(8),
+                content = messages[idx].content,
+                onDismiss = { pendingSave = null },
+                onSave = { tag ->
+                    try {
+                        NoteRepository.createManual(context, messages[idx].content, tags = listOf(tag))
+                        savedTurns.add(idx)
+                        Toast.makeText(context, "已存进笔记（$tag）", Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "没存上：" + (e.message ?: ""), Toast.LENGTH_SHORT).show()
+                    }
+                    pendingSave = null
+                }
+            )
+        }
+    }
+
     // ---------- 模型选择弹窗 ----------
     if (showModelDialog) {
         AlertDialog(
@@ -516,6 +527,62 @@ fun AskScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
             }
         )
     }
+}
+
+/** vc104 存笔记 · 标签选择（默认=问路远；也可归到某门课，期末复习按课翻笔记） */
+@Composable
+private fun SaveNoteDialog(
+    courseNames: List<String>,
+    content: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    var sel by remember { mutableStateOf("问路远") }
+    val tags = listOf("问路远") + courseNames
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("存为笔记 · 选标签", fontWeight = FontWeight.Bold) },
+        confirmButton = {
+            TextButton(onClick = { onSave(sel) }) { Text("存进笔记") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("算了") } },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                ) {
+                    for (t in tags) {
+                        val on = sel == t
+                        Text(
+                            t,
+                            fontSize = 11.5.sp,
+                            fontWeight = if (on) FontWeight.ExtraBold else FontWeight.Normal,
+                            color = if (on) Color.White else LuyuanColors.Ink2,
+                            modifier = Modifier
+                                .background(
+                                    if (on) LuyuanColors.Green700 else MaterialTheme.colorScheme.surface,
+                                    RoundedCornerShape(999.dp)
+                                )
+                                .border(
+                                    1.dp,
+                                    if (on) LuyuanColors.Green700 else MaterialTheme.colorScheme.outline,
+                                    RoundedCornerShape(999.dp)
+                                )
+                                .clickable { sel = t }
+                                .padding(horizontal = 11.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+                Text(
+                    "内容预览：" + content.take(60) + if (content.length > 60) "…" else "",
+                    fontSize = 10.sp, color = LuyuanColors.Ink4, lineHeight = 14.sp
+                )
+            }
+        }
+    )
 }
 
 /** 相册图 → 压缩（最长边 1280，JPEG 85）→ base64 data URL；返回 (缩略图, dataUrl) */

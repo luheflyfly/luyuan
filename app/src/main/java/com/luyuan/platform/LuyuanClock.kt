@@ -42,6 +42,7 @@ object LuyuanClock {
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_COURSE, "上课提醒", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "上课前 10 分钟提醒（含教室）"
+                enableVibration(true)   // vc104：课堂实录视角——手机在口袋里，震动必须有
             }
         )
         nm.createNotificationChannel(
