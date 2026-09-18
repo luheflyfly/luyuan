@@ -48,6 +48,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
@@ -70,7 +71,9 @@ import java.time.LocalTime
 import java.time.format.TextStyle
 import java.util.Locale
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.Icon
@@ -200,7 +203,7 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
     var csuSub by remember { mutableStateOf(0) }
 
     // ---------- 拍作业（vc87 一期：选学科 → 系统相机 → 压缩进 images/ + 带课程标签的笔记） ----------
-    var pickSubject by remember { mutableStateOf(false) }
+    var showHwSheet by remember { mutableStateOf(false) }
     var subject by remember { mutableStateOf("") }
     val cameraUri = remember { mutableStateOf<android.net.Uri?>(null) }
     val cameraFile = remember { mutableStateOf<java.io.File?>(null) }
@@ -229,7 +232,6 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
     var week by remember { mutableStateOf(curWeek) }
     var selCat by remember { mutableStateOf<String?>(null) } // 图例筛选（四分类单选，再点取消）
     var addSlot by remember { mutableStateOf<AddSlot?>(null) }
-    var hwDialog by remember { mutableStateOf(false) }
 
     val next = remember(courses) { nextCourse(courses) }
     val weekCourses = remember(courses, week) { courses.filter { courseInWeek(it, week) } }
@@ -761,41 +763,34 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                             fontSize = 12.sp, fontWeight = FontWeight.Bold, color = LuyuanColors.Ink2
                         )
                         Spacer(Modifier.weight(1f))
+                        // vc101：拍作业/记作业合并为单一入口（两个小文字钮难点中、弹窗分裂）
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
-                                .clickable { pickSubject = true }
-                                .padding(horizontal = 6.dp, vertical = 4.dp)
+                                .background(LuyuanColors.Green700, RoundedCornerShape(999.dp))
+                                .clickable { showHwSheet = true }
+                                .padding(horizontal = 13.dp, vertical = 7.dp)
                         ) {
                             Icon(
-                                Icons.Default.PhotoCamera,
-                                contentDescription = "拍作业",
-                                tint = LuyuanColors.Green700,
-                                modifier = Modifier.size(13.dp)
+                                Icons.Default.Add,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(14.dp)
                             )
                             Spacer(Modifier.width(3.dp))
                             Text(
-                                "拍作业",
-                                fontSize = 11.sp,
+                                "作业",
+                                fontSize = 11.5.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = LuyuanColors.Green700
+                                color = Color.White
                             )
                         }
-                        Text(
-                            "＋ 记作业",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = LuyuanColors.Green700,
-                            modifier = Modifier
-                                .clickable { hwDialog = true }
-                                .padding(horizontal = 6.dp, vertical = 4.dp)
-                        )
                     }
                 }
                 if (homework.isEmpty()) {
                     item {
                         Text(
-                            "还没有作业。点「拍作业」拍张照，或用「记作业」记一条，就会出现在这里。",
+                            "还没有作业。点右上「＋ 作业」，拍照或打字都行，会自动归到学科里。",
                             fontSize = 11.sp, color = LuyuanColors.Ink4
                         )
                     }
@@ -874,15 +869,25 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
         )
     }
 
-    // ---------- 拍作业 · 选学科（vc87） ----------
-    if (pickSubject) {
-        SubjectPickDialog(
+    // ---------- 作业弹窗（vc101：打字/拍照 双模式） ----------
+    if (showHwSheet) {
+        HomeworkSheet(
             courseNames = courseNames.ifEmpty { listOf("未分类") },
             preselect = next?.first?.name ?: courseNames.firstOrNull() ?: "未分类",
-            onDismiss = { pickSubject = false },
-            onGo = { sel ->
+            onDismiss = { showHwSheet = false },
+            onText = { course, text ->
+                try {
+                    NoteRepository.createManual(context, "[$course] $text", tags = listOf(course))
+                    vm.refreshNotes()
+                    showHwSheet = false
+                    Toast.makeText(context, "已记入「$course」", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    Toast.makeText(context, "没存上：${e.message ?: "写入同步目录没成功"}", Toast.LENGTH_LONG).show()
+                }
+            },
+            onPhoto = { sel ->
                 subject = sel
-                pickSubject = false
+                showHwSheet = false
                 try {
                     val dir = java.io.File(context.cacheDir, "camera").apply { mkdirs() }
                     val f = java.io.File(dir, "hw_" + System.currentTimeMillis() + ".jpg")
@@ -894,47 +899,6 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                     takePicture.launch(uri)
                 } catch (e: Exception) {
                     Toast.makeText(context, "相机启动失败：" + (e.message ?: ""), Toast.LENGTH_SHORT).show()
-                }
-            }
-        )
-    }
-
-    // ---------- 节次时间编辑（vc100：点网格时间列的大节号） ----------
-    editPeriodBig?.let { big ->
-        PeriodEditDialog(
-            big = big,
-            initial = periods.filter { (it.no - 1) / 2 + 1 == big },
-            onDismiss = { editPeriodBig = null },
-            onSave = { t1, t2 ->
-                val nos = listOf((big - 1) * 2 + 1, (big - 1) * 2 + 2)
-                val newMap = periodOverrides.toMutableMap()
-                if (t1.isNotBlank()) newMap[nos[0]] = t1
-                if (t2.isNotBlank()) newMap[nos[1]] = t2
-                periodOverrides = newMap
-                prefs.edit().putString(
-                    "keiwu_period_overrides",
-                    newMap.entries.joinToString(",", prefix = "{", postfix = "}") {
-                        "\"" + it.key + "\":\"" + it.value + "\""
-                    }
-                ).apply()
-                editPeriodBig = null
-                Toast.makeText(context, "已更新第" + big + "大节时间", Toast.LENGTH_SHORT).show()
-            }
-        )
-    }
-
-    // ---------- 记作业 ----------
-    if (hwDialog) {
-        HomeworkDialog(
-            courseNames = courseNames,
-            onDismiss = { hwDialog = false },
-            onSave = { course, text ->
-                try {
-                    NoteRepository.createManual(context, "[$course] $text", tags = listOf(course))
-                    hwDialog = false
-                    Toast.makeText(context, "作业已记录并打上「$course」标签", Toast.LENGTH_SHORT).show()
-                } catch (e: Exception) {
-                    Toast.makeText(context, "没存上：${e.message ?: "写入同步目录没成功"}", Toast.LENGTH_LONG).show()
                 }
             }
         )
@@ -1060,25 +1024,44 @@ private fun AddCourseDialog(
     )
 }
 
+/** vc101 记作业 · 双模式弹窗（打字 / 拍照），学科 chips 默认=下一节课 */
 @Composable
-private fun HomeworkDialog(
+private fun HomeworkSheet(
     courseNames: List<String>,
+    preselect: String,
     onDismiss: () -> Unit,
-    onSave: (course: String, text: String) -> Unit
+    onText: (String, String) -> Unit,
+    onPhoto: (String) -> Unit
 ) {
-    var sel by remember { mutableStateOf(courseNames.firstOrNull() ?: "") }
+    var mode by remember { mutableStateOf(0) }   // 0=打字 1=拍照
+    var sel by remember { mutableStateOf(preselect) }
     var text by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("记作业", fontWeight = FontWeight.Bold) },
         confirmButton = {
             TextButton(
-                onClick = { if (sel.isNotBlank() && text.isNotBlank()) onSave(sel, text.trim()) }
-            ) { Text("记下") }
+                onClick = {
+                    if (mode == 0) {
+                        if (text.isNotBlank()) onText(sel, text.trim())
+                    } else {
+                        onPhoto(sel)
+                    }
+                },
+                enabled = mode == 1 || text.isNotBlank()
+            ) { Text(if (mode == 0) "记下" else "拍照") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("算了") } },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    ModeChip("打字记", Icons.Default.EditNote, mode == 0, Modifier.weight(1f)) { mode = 0 }
+                    ModeChip("拍照记", Icons.Default.PhotoCamera, mode == 1, Modifier.weight(1f)) { mode = 1 }
+                }
+                Text(
+                    "学科（默认 = 下一节课）",
+                    fontSize = 11.sp, color = LuyuanColors.Ink3
+                )
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.horizontalScroll(rememberScrollState())
@@ -1087,7 +1070,7 @@ private fun HomeworkDialog(
                         val on = sel == c
                         Text(
                             c,
-                            fontSize = 11.sp,
+                            fontSize = 11.5.sp,
                             fontWeight = if (on) FontWeight.ExtraBold else FontWeight.Normal,
                             color = if (on) MaterialTheme.colorScheme.primary else LuyuanColors.Ink3,
                             modifier = Modifier
@@ -1101,119 +1084,57 @@ private fun HomeworkDialog(
                                     RoundedCornerShape(999.dp)
                                 )
                                 .clickable { sel = c }
-                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                                .padding(horizontal = 10.dp, vertical = 5.dp)
                         )
                     }
                 }
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    placeholder = { Text("作业内容，如：Unit 3 预习") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(
-                        onDone = { if (sel.isNotBlank() && text.isNotBlank()) onSave(sel, text.trim()) }
+                if (mode == 0) {
+                    OutlinedTextField(
+                        value = text,
+                        onValueChange = { text = it },
+                        placeholder = { Text("作业内容，如：Unit 3 预习") },
+                        minLines = 2,
+                        modifier = Modifier.fillMaxWidth()
                     )
-                )
-                Text("存成一条带课程标签的笔记，电脑端课程页同一套口径。", fontSize = 10.sp, color = LuyuanColors.Ink4)
-            }
-        }
-    )
-}
-
-/** vc100 节次时间编辑：一大节两小堂，各填 "开始-结束"（如 08:00-08:45）；留空=不改 */
-@Composable
-private fun PeriodEditDialog(
-    big: Int,
-    initial: List<PeriodTang>,
-    onDismiss: () -> Unit,
-    onSave: (tang1: String, tang2: String) -> Unit
-) {
-    val t1 = initial.getOrNull(0)
-    val t2 = initial.getOrNull(1)
-    var f1 by remember { mutableStateOf(if (t1 != null && t1.start.isNotBlank()) t1.start + "-" + t1.end else "") }
-    var f2 by remember { mutableStateOf(if (t2 != null && t2.start.isNotBlank()) t2.start + "-" + t2.end else "") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("第" + big + "大节 · 上课时间", fontWeight = FontWeight.Bold) },
-        confirmButton = {
-            TextButton(onClick = { onSave(f1.trim(), f2.trim()) }) { Text("保存") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("算了") } },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = f1,
-                    onValueChange = { f1 = it },
-                    label = { Text("第1小堂（" + ((big - 1) * 2 + 1) + "节），如 08:00-08:45") },
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = f2,
-                    onValueChange = { f2 = it },
-                    label = { Text("第2小堂（" + ((big - 1) * 2 + 2) + "节），如 08:55-09:40") },
-                    singleLine = true
-                )
-                Text(
-                    "改的是这台手机上的显示口径；两堂都上就填两行，单堂课只占对应的那一行。",
-                    fontSize = 10.sp, color = LuyuanColors.Ink4
-                )
-            }
-        }
-    )
-}
-
-/** vc87 拍作业 · 学科选择（默认=下一节课的课名；照片自动挂到该学科标签下） */
-@Composable
-private fun SubjectPickDialog(
-    courseNames: List<String>,
-    preselect: String,
-    onDismiss: () -> Unit,
-    onGo: (String) -> Unit
-) {
-    var sel by remember { mutableStateOf(preselect) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("拍作业 · 选学科", fontWeight = FontWeight.Bold) },
-        confirmButton = {
-            TextButton(onClick = { if (sel.isNotBlank()) onGo(sel) }) { Text("拍照") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("算了") } },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.horizontalScroll(rememberScrollState())
-                ) {
-                    for (c in courseNames) {
-                        val on = sel == c
-                        Text(
-                            c,
-                            fontSize = 11.sp,
-                            fontWeight = if (on) FontWeight.ExtraBold else FontWeight.Normal,
-                            color = if (on) MaterialTheme.colorScheme.primary else LuyuanColors.Ink3,
-                            modifier = Modifier
-                                .background(
-                                    if (on) LuyuanColors.Green50 else MaterialTheme.colorScheme.surface,
-                                    RoundedCornerShape(999.dp)
-                                )
-                                .border(
-                                    1.dp,
-                                    if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                                    RoundedCornerShape(999.dp)
-                                )
-                                .clickable { sel = c }
-                                .padding(horizontal = 10.dp, vertical = 4.dp)
-                        )
-                    }
+                } else {
+                    Text(
+                        "选好学科点「拍照」：照片自动压缩进同步目录并挂到「" + sel + "」学科下，电脑端同步可见。",
+                        fontSize = 10.sp, color = LuyuanColors.Ink4, lineHeight = 15.sp
+                    )
                 }
-                Text(
-                    "照片自动压缩存进同步目录（电脑端也能看），并挂到「$sel」学科下。",
-                    fontSize = 10.sp, color = LuyuanColors.Ink4
-                )
             }
         }
     )
+}
+
+@Composable
+private fun ModeChip(
+    label: String,
+    icon: ImageVector,
+    on: Boolean,
+    modifier: Modifier,
+    onClick: () -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+        modifier = modifier
+            .background(
+                if (on) LuyuanColors.Green100 else MaterialTheme.colorScheme.surface,
+                RoundedCornerShape(12.dp)
+            )
+            .border(
+                1.5.dp,
+                if (on) LuyuanColors.Green700 else MaterialTheme.colorScheme.outline,
+                RoundedCornerShape(12.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp)
+    ) {
+        Icon(icon, contentDescription = null, tint = LuyuanColors.Green700, modifier = Modifier.size(15.dp))
+        Spacer(Modifier.width(5.dp))
+        Text(label, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = LuyuanColors.Green700)
+    }
 }
 
 // ---------- 纯函数 ----------
