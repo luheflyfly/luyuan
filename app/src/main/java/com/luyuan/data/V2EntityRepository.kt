@@ -43,6 +43,8 @@ data class Course(
     val category: String = "",      // vc85：PC 课务导出的课目分类（数学/思政/外语…）；空=旧文件走课名归类
     val color: String = "",         // vc85：PC 课务导出的课目色 "#1d4ed8"；空=走四分类色
     val source: String = "",        // vc85：keiwu=PC 课务系统导出
+    val start_period: Int = 0,      // vc100：起始小节（1-10）——网格小堂制排布用；0=旧文件按时钟回推
+    val end_period: Int = 0,        // vc100：结束小节
     val device: String = "",
     val schema: Int = 2,            // SYNC_FORMAT §10.1 课表实体格式版本
     val deleted: Boolean = false,

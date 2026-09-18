@@ -31,12 +31,19 @@ data class KeiwuEvent(
 )
 
 @Serializable
+data class KeiwuClassPeriod(
+    val period: Int = 0,
+    val time: String = ""
+)
+
+@Serializable
 data class KeiwuEventsBundle(
     val kind: String = "",
     val schema: Int = 1,
     val updated_at: String = "",
     val semester_start: String = "",
     val total_weeks: Int = 20,
+    val class_periods: List<KeiwuClassPeriod> = emptyList(),
     val items: List<KeiwuEvent> = emptyList()
 )
 

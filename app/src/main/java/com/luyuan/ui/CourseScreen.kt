@@ -117,6 +117,54 @@ internal fun courseColorOf(c: Course): Color =
         }
     } else categoryColor(courseCategoryOf(c))
 
+/** vc100：节次（小堂）时间。默认=PC 课务导出的节次表；路河改过的存 prefs 只影响本机显示 */
+internal data class PeriodTang(val no: Int, val start: String, val end: String)
+
+internal fun defaultPeriods(): List<PeriodTang> = listOf(
+    PeriodTang(1, "08:00", "08:45"), PeriodTang(2, "08:55", "09:40"),
+    PeriodTang(3, "10:00", "10:45"), PeriodTang(4, "10:55", "11:40"),
+    PeriodTang(5, "14:00", "14:45"), PeriodTang(6, "14:55", "15:40"),
+    PeriodTang(7, "16:00", "16:45"), PeriodTang(8, "16:55", "17:40"),
+    PeriodTang(9, "19:00", "19:45"), PeriodTang(10, "19:55", "20:40")
+)
+
+internal fun buildPeriods(
+    fromBundle: List<com.luyuan.data.KeiwuClassPeriod>,
+    overrides: Map<Int, String>
+): List<PeriodTang> {
+    val base = if (fromBundle.isEmpty()) defaultPeriods() else fromBundle.mapNotNull { cp ->
+        val seg = cp.time.split('-', '–').map { it.trim() }
+        if (seg.size == 2 && cp.period in 1..30) PeriodTang(cp.period, seg[0], seg[1]) else null
+    }.sortedBy { it.no }
+    return (1..10).map { no ->
+        val d = base.firstOrNull { it.no == no } ?: PeriodTang(no, "", "")
+        overrides[no]?.let { o ->
+            val seg = o.split('-').map { it.trim() }
+            if (seg.size == 2) d.copy(start = seg[0], end = seg[1]) else d
+        } ?: d
+    }
+}
+
+internal fun loadPeriodOverrides(prefs: android.content.SharedPreferences): Map<Int, String> {
+    val raw = prefs.getString("keiwu_period_overrides", null) ?: return emptyMap()
+    val out = mutableMapOf<Int, String>()
+    Regex("\"(\d+)\"\s*:\s*\"([^\"]+)\"").findAll(raw).forEach {
+        it.groupValues[1].toIntOrNull()?.let { no -> out[no] = it.groupValues[2] }
+    }
+    return out
+}
+
+/** 课 → 节次区间：新数据直接用 start_period/end_period；旧数据按时钟匹配节次表回推 */
+internal fun courseTangRange(c: Course, periods: List<PeriodTang>): Pair<Int, Int>? {
+    if (c.start_period in 1..30) {
+        val s = c.start_period
+        return s to maxOf(c.end_period, s)
+    }
+    val s = periods.firstOrNull { it.start == c.start }?.no ?: return null
+    val e = periods.firstOrNull { it.end == c.end }?.no ?: s
+    return minOf(s, e) to maxOf(s, e)
+}
+
 internal fun categoryColor(cat: String): Color = when (cat) {
     CAT_MATH -> Color(0xFF4F8A73)   // 数学 · 深绿
     CAT_PUBLIC -> Color(0xFFB45309) // 公共 · 金
@@ -124,9 +172,10 @@ internal fun categoryColor(cat: String): Color = when (cat) {
     else -> Color(0xFF6D28D9)       // 专业 · 紫
 }
 
-private const val GRID_CELL_W = 62
-private const val GRID_TIME_W = 34
-private const val GRID_CELL_H = 56
+private const val GRID_CELL_W = 70
+private const val GRID_TIME_W = 44
+private const val GRID_CELL_H = 68      // 一大节 = 两小堂（vc100 小堂制）
+private const val TANG_H = 32           // 一小堂高度
 
 /** 点空格子加课的槽位（列=星期几，行=节次时间） */
 private data class AddSlot(val weekday: Int, val start: String, val end: String)
@@ -201,6 +250,19 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
         CAT_PE to categoryColor(CAT_PE)
     )
     val nowT = remember { LocalTime.now() }
+
+    // vc100 节次表：默认=PC 课务导出，prefs 存路河的修改（只影响本机显示口径）
+    var periodOverrides by remember { mutableStateOf(loadPeriodOverrides(prefs)) }
+    val periods = remember(keiwuEvents, periodOverrides) {
+        buildPeriods(keiwuEvents?.class_periods ?: emptyList(), periodOverrides)
+    }
+    var editPeriodBig by remember { mutableStateOf<Int?>(null) }
+
+    // vc100 今天的课：一眼看到今天每节课在什么教室（含已上完的置灰、正在上的高亮）
+    val todayCourses = remember(courses, curWeek) {
+        courses.filter { it.weekday == today.dayOfWeek.value && courseInWeek(it, curWeek) }
+            .sortedBy { slotToMin(it.start) }
+    }
 
     val totalWeeks = remember(courses) {
         var mx = 0
@@ -329,6 +391,75 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                 }
             }
 
+            // vc100 今天的课（路河：要能直接看到今天每节课在什么教室）
+            if (todayCourses.isNotEmpty()) {
+                item(key = "today_list_head") {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "今天的课",
+                            fontSize = 12.sp, fontWeight = FontWeight.Bold, color = LuyuanColors.Ink2
+                        )
+                        Spacer(Modifier.weight(1f))
+                        Text("${todayCourses.size} 节", fontSize = 10.sp, color = LuyuanColors.Ink4)
+                    }
+                }
+                for ((idx, c) in todayCourses.withIndex()) {
+                    item(key = "today_c_" + c.id + "_$idx") {
+                        val tang = courseTangRange(c, periods)
+                        val startTxt = tang?.let { periods.getOrNull(it.first - 1)?.start } ?: c.start
+                        val endTxt = tang?.let { periods.getOrNull(it.second - 1)?.end } ?: c.end
+                        val nowMin = nowT.hour * 60 + nowT.minute
+                        val past = slotToMin(endTxt) <= nowMin
+                        val ongoingNow = slotToMin(startTxt) <= nowMin && nowMin < slotToMin(endTxt)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
+                                .padding(horizontal = 12.dp, vertical = 10.dp)
+                        ) {
+                            Column(Modifier.width(78.dp)) {
+                                Text(
+                                    startTxt, fontSize = 15.sp, fontWeight = FontWeight.Bold,
+                                    color = if (past) LuyuanColors.Ink3 else LuyuanColors.Ink1
+                                )
+                                Text(
+                                    if (tang != null) "第" + tang.first + "-" + tang.second + "节" else "",
+                                    fontSize = 9.5.sp, color = LuyuanColors.Ink4
+                                )
+                            }
+                            Spacer(Modifier.width(10.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    c.name,
+                                    fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                                    color = if (past) LuyuanColors.Ink3 else LuyuanColors.Ink1,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    "@" + coursePlaceLine(c),
+                                    fontSize = 12.sp,
+                                    fontWeight = if (ongoingNow) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (ongoingNow) LuyuanColors.Green700 else LuyuanColors.Ink3,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            if (ongoingNow) {
+                                Text(
+                                    "正在上", fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                                    color = LuyuanColors.Green700,
+                                    modifier = Modifier
+                                        .background(LuyuanColors.Green100, RoundedCornerShape(999.dp))
+                                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                                )
+                            } else if (past) {
+                                Text("已下课", fontSize = 9.5.sp, color = LuyuanColors.Ink4)
+                            }
+                        }
+                    }
+                }
+            }
+
             // 周次切换条（木案 wkbar：◀ 第N周 ▶ / 本周 / 共N周）
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -361,8 +492,8 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                 }
             }
 
-            // 节次×星期网格（横向可滑到周六日；今天列金高亮；空格今天=＋加课）
-            if (slots.isNotEmpty()) {
+            // 节次×星期网格（vc100 小堂制：一大节=两小堂，单堂课占半格；时间列可点改）
+            if (weekCourses.isNotEmpty() && periods.any { it.start.isNotBlank() }) {
                 item {
                     Row(
                         modifier = Modifier
@@ -397,32 +528,48 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                                     }
                                 }
                             }
-                            // 节次行
-                            for ((idx, s) in slots.withIndex()) {
+                            // 五大节行（每大节=两小堂）
+                            for (big in 1..5) {
+                                val tangs = listOf(
+                                    periods.getOrNull((big - 1) * 2),
+                                    periods.getOrNull((big - 1) * 2 + 1)
+                                )
                                 Row {
+                                    // 时间列：大节号 + 两小堂时间（点一下改这对时间）
                                     Box(
                                         contentAlignment = Alignment.Center,
                                         modifier = Modifier
                                             .width(GRID_TIME_W.dp)
                                             .height(GRID_CELL_H.dp)
                                             .background(MaterialTheme.colorScheme.surface)
+                                            .clickable { editPeriodBig = big }
                                     ) {
                                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                             Text(
-                                                "${idx + 1}",
+                                                "" + big,
                                                 fontSize = 11.sp, fontWeight = FontWeight.Bold, color = LuyuanColors.Ink2
                                             )
-                                            Text(s, fontSize = 8.sp, color = LuyuanColors.Ink4)
+                                            for (t in tangs) {
+                                                Text(
+                                                    t?.start?.ifBlank { null } ?: "--",
+                                                    fontSize = 8.5.sp, color = LuyuanColors.Ink4
+                                                )
+                                            }
                                         }
                                     }
                                     for (i in 1..7) {
                                         val isToday = i == today.dayOfWeek.value
-                                        val cell = weekCourses.firstOrNull {
-                                            it.weekday == i && it.start == s
+                                        // 该大节（两小堂）里落在这天的课：取跨堂最多的
+                                        val candidates = weekCourses.mapNotNull { c ->
+                                            val r = courseTangRange(c, periods) ?: return@mapNotNull null
+                                            val first = (big - 1) * 2 + 1
+                                            if (c.weekday == i && r.first <= first + 1 && r.second >= first) {
+                                                Triple(c, r.first, r.second)
+                                            } else null
                                         }
-                                        val dimmed = selCat != null && cell != null && courseCategoryOf(cell) != selCat
+                                        val pick = candidates.maxByOrNull { it.third - it.second }
+                                        val dimmed = selCat != null && pick != null && courseCategoryOf(pick.first) != selCat
                                         Box(
-                                            contentAlignment = Alignment.Center,
                                             modifier = Modifier
                                                 .width(GRID_CELL_W.dp)
                                                 .height(GRID_CELL_H.dp)
@@ -431,19 +578,17 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                                                     MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
                                                 )
                                                 .background(
-                                                    // 木案 today-col：金淡染渐变
                                                     if (isToday) Brush.verticalGradient(
                                                         listOf(Color(0x26B45309), Color(0x05B45309))
                                                     ) else SolidColor(MaterialTheme.colorScheme.background)
                                                 )
-                                                .clickable(enabled = cell == null && isToday) {
-                                                    val end = parseHm(s)?.plusMinutes(45)?.toString()?.take(5)
-                                                    addSlot = AddSlot(i, s, end ?: s)
-                                                }
                                         ) {
-                                            if (cell != null) {
+                                            if (pick != null) {
+                                                val (cell, sTang, eTang) = pick
+                                                val firstTang = (big - 1) * 2 + 1
                                                 val cc = courseColorOf(cell)
-                                                // 木案 .cc：左侧 3dp 分类色条 + 课名两行 + @教室（进行中标注）
+                                                val spanTang = (eTang - sTang + 1).coerceIn(1, 2)
+                                                val topTang = (sTang - firstTang).coerceIn(0, 1)
                                                 val ongoing = isToday && run {
                                                     val s2 = parseHm(cell.start)
                                                     val e2 = parseHm(cell.end)
@@ -451,11 +596,13 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                                                 }
                                                 Row(
                                                     Modifier
-                                                        .fillMaxSize()
+                                                        .padding(top = (topTang * TANG_H).dp)
+                                                        .height((spanTang * TANG_H - 4).dp)
+                                                        .fillMaxWidth()
                                                         .padding(3.dp)
                                                         .background(
-                                                            cc.copy(alpha = if (dimmed) 0.04f else 0.10f),
-                                                            RoundedCornerShape(7.dp)
+                                                            cc.copy(alpha = if (dimmed) 0.04f else 0.12f),
+                                                            RoundedCornerShape(8.dp)
                                                         )
                                                 ) {
                                                     Box(
@@ -467,27 +614,39 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                                                                 RoundedCornerShape(2.dp)
                                                             )
                                                     )
-                                                    Column(Modifier.padding(horizontal = 4.dp, vertical = 3.dp)) {
+                                                    Column(Modifier.padding(horizontal = 5.dp, vertical = 4.dp)) {
                                                         Text(
                                                             cell.name,
-                                                            fontSize = 9.sp,
+                                                            fontSize = 10.5.sp,
                                                             fontWeight = FontWeight.SemiBold,
                                                             color = if (dimmed) LuyuanColors.Ink4 else LuyuanColors.Ink1,
                                                             maxLines = 2,
                                                             overflow = TextOverflow.Ellipsis,
-                                                            lineHeight = 11.sp
+                                                            lineHeight = 12.5.sp
                                                         )
                                                         Text(
-                                                            "@" + coursePlaceLine(cell) + if (ongoing) " · 现在进行" else "",
-                                                            fontSize = 8.sp,
-                                                            color = if (ongoing) cc else LuyuanColors.Ink4,
-                                                            maxLines = 1,
-                                                            overflow = TextOverflow.Ellipsis
+                                                            "@" + coursePlaceLine(cell) + if (ongoing) " · 现在" else "",
+                                                            fontSize = 9.5.sp,
+                                                            fontWeight = if (ongoing) FontWeight.Bold else FontWeight.Normal,
+                                                            color = if (ongoing) cc else LuyuanColors.Ink3,
+                                                            maxLines = 1, overflow = TextOverflow.Ellipsis
                                                         )
                                                     }
                                                 }
-                                            } else if (isToday) {
-                                                Text("＋", fontSize = 13.sp, color = LuyuanColors.Ink4)
+                                            } else if (isToday && week == curWeek) {
+                                                val tang1 = tangs[0]
+                                                Box(
+                                                    contentAlignment = Alignment.Center,
+                                                    modifier = Modifier
+                                                        .fillMaxSize()
+                                                        .clickable {
+                                                            val s0 = tang1?.start ?: "08:00"
+                                                            val end = parseHm(s0)?.plusMinutes(45)?.toString()?.take(5)
+                                                            addSlot = AddSlot(i, s0, end ?: s0)
+                                                        }
+                                                ) {
+                                                    Text("＋", fontSize = 14.sp, color = LuyuanColors.Ink4)
+                                                }
                                             }
                                         }
                                     }
@@ -495,6 +654,13 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                             }
                         }
                     }
+                }
+                item(key = "grid_hint") {
+                    Text(
+                        "点时间列的大节号可改这对课的时间；单堂课占半格。",
+                        fontSize = 9.5.sp, color = LuyuanColors.Ink4,
+                        modifier = Modifier.padding(start = 2.dp)
+                    )
                 }
             }
 
@@ -732,6 +898,30 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
         )
     }
 
+    // ---------- 节次时间编辑（vc100：点网格时间列的大节号） ----------
+    editPeriodBig?.let { big ->
+        PeriodEditDialog(
+            big = big,
+            initial = periods.filter { (it.no - 1) / 2 + 1 == big },
+            onDismiss = { editPeriodBig = null },
+            onSave = { t1, t2 ->
+                val nos = listOf((big - 1) * 2 + 1, (big - 1) * 2 + 2)
+                val newMap = periodOverrides.toMutableMap()
+                if (t1.isNotBlank()) newMap[nos[0]] = t1
+                if (t2.isNotBlank()) newMap[nos[1]] = t2
+                periodOverrides = newMap
+                prefs.edit().putString(
+                    "keiwu_period_overrides",
+                    newMap.entries.joinToString(",", prefix = "{", postfix = "}") {
+                        "\"" + it.key + "\":\"" + it.value + "\""
+                    }
+                ).apply()
+                editPeriodBig = null
+                Toast.makeText(context, "已更新第" + big + "大节时间", Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+
     // ---------- 记作业 ----------
     if (hwDialog) {
         HomeworkDialog(
@@ -925,6 +1115,48 @@ private fun HomeworkDialog(
                     )
                 )
                 Text("存成一条带课程标签的笔记，电脑端课程页同一套口径。", fontSize = 10.sp, color = LuyuanColors.Ink4)
+            }
+        }
+    )
+}
+
+/** vc100 节次时间编辑：一大节两小堂，各填 "开始-结束"（如 08:00-08:45）；留空=不改 */
+@Composable
+private fun PeriodEditDialog(
+    big: Int,
+    initial: List<PeriodTang>,
+    onDismiss: () -> Unit,
+    onSave: (tang1: String, tang2: String) -> Unit
+) {
+    val t1 = initial.getOrNull(0)
+    val t2 = initial.getOrNull(1)
+    var f1 by remember { mutableStateOf(if (t1 != null && t1.start.isNotBlank()) t1.start + "-" + t1.end else "") }
+    var f2 by remember { mutableStateOf(if (t2 != null && t2.start.isNotBlank()) t2.start + "-" + t2.end else "") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("第" + big + "大节 · 上课时间", fontWeight = FontWeight.Bold) },
+        confirmButton = {
+            TextButton(onClick = { onSave(f1.trim(), f2.trim()) }) { Text("保存") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("算了") } },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = f1,
+                    onValueChange = { f1 = it },
+                    label = { Text("第1小堂（" + ((big - 1) * 2 + 1) + "节），如 08:00-08:45") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = f2,
+                    onValueChange = { f2 = it },
+                    label = { Text("第2小堂（" + ((big - 1) * 2 + 2) + "节），如 08:55-09:40") },
+                    singleLine = true
+                )
+                Text(
+                    "改的是这台手机上的显示口径；两堂都上就填两行，单堂课只占对应的那一行。",
+                    fontSize = 10.sp, color = LuyuanColors.Ink4
+                )
             }
         }
     )
