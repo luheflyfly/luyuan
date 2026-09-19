@@ -11,40 +11,29 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.luyuan.MainActivity
 import com.luyuan.R
-import com.luyuan.data.Course
 import com.luyuan.data.TodoStore
 import com.luyuan.data.V2EntityRepository
 import java.util.Calendar
 
 /**
- * 路远时钟（vc103）：三类系统级节拍，全部本地数据、零网络零 AI——
- * ①上课前提醒：当日/未来 7 天的课，开始前 10 分钟 Exact 闹钟，响后自动排下一节；
- * ②桌面小组件保活刷新：每 15 分钟一次（Receiver 内只在 07:00-21:59 真刷，夜间到点跳过省电）；
- * ③晨间简报：每天 07:10 通知「今日课表 + 3 天内截止作业」。
+ * 路远时钟（vc106 更新）：两类系统级节拍，全部本地数据、零网络零 AI——
+ * ①桌面小组件保活刷新：每 15 分钟一次（Receiver 内只在 07:00-21:59 真刷，夜间到点跳过省电）；
+ * ②晨间简报：每天 07:10 通知「今日课表 + 今日校历事件 + 3 天内截止作业」。
+ * 【vc106 移除上课前提醒】路河 09-19：上课前提醒完全多余——人已经在教室坐着了。
  * 课表/作业数据 = 同步目录 course_*.json / todo_*.json（PC 课务导出为准）。
- * 调度时机：App 打开（LuyuanViewModel.init）、BootReceiver、每次课程提醒响后自排。
+ * 调度时机：App 打开（LuyuanViewModel.init）、BootReceiver。
  */
 object LuyuanClock {
-    const val ACTION_COURSE = "com.luyuan.COURSE_REMINDER"
     const val ACTION_WIDGET = "com.luyuan.WIDGET_KEEPALIVE"
     const val ACTION_BRIEF = "com.luyuan.MORNING_BRIEF"
-    const val CHANNEL_COURSE = "luyuan_course"
     const val CHANNEL_BRIEF = "luyuan_brief"
 
-    private const val LEAD_MIN = 10L            // 提前量：开始前 10 分钟
-    private const val REQ_COURSE = 9101
     private const val REQ_WIDGET = 9102
     private const val REQ_BRIEF = 9103
     private const val WIDGET_PERIOD_MIN = 15L
 
     fun ensureChannels(context: Context) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_COURSE, "上课提醒", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "上课前 10 分钟提醒（含教室）"
-                enableVibration(true)   // vc104：课堂实录视角——手机在口袋里，震动必须有
-            }
-        )
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_BRIEF, "晨间简报", NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = "每天 07:10：今日课表与临近截止作业"
@@ -57,16 +46,7 @@ object LuyuanClock {
         ensureChannels(context)
         val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
-        // ① 下一节课提醒
-        nextClass(context)?.let { (c, at) ->
-            val i = Intent(context, ClockReceiver::class.java).setAction(ACTION_COURSE)
-                .putExtra("name", c.name)
-                .putExtra("place", coursePlace(c))
-                .putExtra("start", c.start)
-            if (setExact(am, at, pi(context, i, REQ_COURSE))) return@let
-        }
-
-        // ② Widget 保活（Receiver 内按时段过滤，夜间到点跳过）
+        // ① Widget 保活（Receiver 内按时段过滤，夜间到点跳过）
         val wpi = pi(context, Intent(context, ClockReceiver::class.java).setAction(ACTION_WIDGET), REQ_WIDGET)
         if (canExact(am)) {
             am.setRepeating(AlarmManager.RTC_WAKEUP,
@@ -110,29 +90,6 @@ object LuyuanClock {
         return cal.timeInMillis
     }
 
-    /** 下一节要上的课（提醒时刻 = 开始-10 分钟；只排未来的，已开课的跳过） */
-    private fun nextClass(context: Context): Pair<Course, Long>? {
-        val courses = try { V2EntityRepository.listCourses(context) } catch (_: Exception) { emptyList<Course>() }
-        if (courses.isEmpty()) return null
-        val week = try { com.luyuan.domain.semesterWeekOf(java.time.LocalDate.now()) } catch (_: Exception) { 1 }
-        val inWeek = courses.filter { weeksMatch(it.weeks, week) }
-        if (inWeek.isEmpty()) return null
-        val zone = java.time.ZoneId.systemDefault()
-        val today = java.time.LocalDate.now()
-        for (delta in 0..7) {
-            val date = today.plusDays(delta.toLong())
-            val dayCourses = inWeek.filter { it.weekday == date.dayOfWeek.value && it.start.isNotBlank() }
-                .sortedBy { slotToMin(it.start) }
-            for (c in dayCourses) {
-                val p = slotToMin(c.start)
-                val at = date.atTime(p / 60, p % 60).atZone(zone).toInstant().toEpochMilli() -
-                        LEAD_MIN * 60_000L
-                if (at > System.currentTimeMillis()) return c to at
-            }
-        }
-        return null
-    }
-
     /** weeks "1-16" / "1,3,5" / "2-8,10-16"；空=每周都有（与学业页 courseInWeek 同口径） */
     private fun weeksMatch(spec: String, week: Int): Boolean {
         val w = spec.trim()
@@ -151,9 +108,6 @@ object LuyuanClock {
         }
         return false
     }
-
-    private fun coursePlace(c: Course): String =
-        listOf(c.place, c.teacher).filter { it.isNotBlank() }.joinToString(" · ")
 
     /** 晨间简报正文：今日课表 + 3 天内截止作业 */
     fun briefText(context: Context): String {
@@ -205,39 +159,6 @@ object LuyuanClock {
 class ClockReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
-            LuyuanClock.ACTION_COURSE -> {
-                val name = intent.getStringExtra("name") ?: "课程"
-                val place = intent.getStringExtra("place") ?: ""
-                val start = intent.getStringExtra("start") ?: ""
-                LuyuanClock.ensureChannels(context)
-                val page = Intent(context, MainActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    putExtra("page", "course")
-                }
-                val ppi = PendingIntent.getActivity(
-                    context, name.hashCode(), page,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
-                val n = NotificationCompat.Builder(context, LuyuanClock.CHANNEL_COURSE)
-                    .setSmallIcon(R.drawable.ic_stat_luyuan)
-                    .setColor(0xFF224A3A.toInt())
-                    .setContentTitle("$start 上课 · $name")
-                    .setContentText(if (place.isNotBlank()) "10 分钟后 · @$place" else "10 分钟后上课")
-                    .setStyle(NotificationCompat.BigTextStyle().bigText(
-                        if (place.isNotBlank()) "$name\n@$place" else name))
-                    .setContentIntent(ppi)
-                    .setCategory(NotificationCompat.CATEGORY_REMINDER)
-                    .setPriority(NotificationCompat.PRIORITY_MAX)
-                    .setAutoCancel(true)
-                    .build()
-                try {
-                    androidx.core.app.NotificationManagerCompat.from(context)
-                        .notify(name.hashCode(), n)
-                } catch (_: SecurityException) {
-                    // 无通知权限：静默跳过
-                }
-                LuyuanClock.rescheduleAll(context)   // 排下一节
-            }
             LuyuanClock.ACTION_WIDGET -> {
                 val h = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
                 if (h in 7..21) {                    // 夜间到点跳过，省电
