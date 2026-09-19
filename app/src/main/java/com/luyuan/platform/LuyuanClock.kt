@@ -112,7 +112,7 @@ object LuyuanClock {
     /** 晨间简报正文：今日课表 + 3 天内截止作业 */
     fun briefText(context: Context): String {
         val sb = StringBuilder()
-        val courses = try { V2EntityRepository.listCourses(context) } catch (_: Exception) { emptyList<Course>() }
+        val courses = try { V2EntityRepository.listCourses(context) } catch (_: Exception) { emptyList() }
         val week = try { com.luyuan.domain.semesterWeekOf(java.time.LocalDate.now()) } catch (_: Exception) { 1 }
         val today = java.time.LocalDate.now()
         val todays = courses.filter { it.weekday == today.dayOfWeek.value && weeksMatch(it.weeks, week) }
