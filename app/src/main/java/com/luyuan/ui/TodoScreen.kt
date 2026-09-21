@@ -165,7 +165,11 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
                 Row(
                     key = "msg_${t.id}", text = t.text, who = t.who.ifBlank { t.sender },
                     // vc98：due_at（绝对截止）优先，when_text 原文兜底
-                    score = deadlineScore(t.due_at, t.when_text, t.created_at, now),
+                    // vc107 修装反：deadlineScore(whenText, remindAt)=（原文, 绝对时间）——
+                    // vc98 起 due_at 被错塞进 whenText 位，ISO 没走到 parseIso，回落把 ISO 里的
+                    // "12:00" 当"今天 12:00"（时间轴全进今天桶/未过期标红）；dueLabel 本来就对，
+                    // 所以出现"列表日期对、时间轴错、红色误报"三症状一根因
+                    score = deadlineScore(t.when_text, t.due_at.takeIf { it.isNotBlank() }, t.created_at, now),
                     dueLabel = dueLabel(t.due_at.takeIf { it.isNotBlank() }, t.when_text, now),
                     origin = if (t.device == "pc") "电脑" else "消息", // PC msgdigest 同步件标注
                     msgItem = t
@@ -178,7 +182,7 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
             out.add(
                 Row(
                     key = "p_${p.id}", text = p.text, who = p.sender.ifBlank { p.who },
-                    score = deadlineScore(p.dueIso, p.whenText, p.created_at, now),
+                    score = deadlineScore(p.whenText, p.dueIso.takeIf { it.isNotBlank() }, p.created_at, now),
                     dueLabel = dueLabel(p.dueIso.takeIf { it.isNotBlank() }, p.whenText, now), origin = "消息",
                     isPending = true, pendingItem = p
                 )
@@ -709,33 +713,73 @@ private fun TimelineRow(r: TRow, onToggle: (String) -> Unit) {
 }
 
 // ---------- 截止时间解析（确定性，不做猜测；解析不出 = 无期限排最后） ----------
+// vc107 大扩：号/下周X/周末/月底/中文钟点（下午三点半）——真机取证 15 条仅 2 条能落日期的教训
 
 private val RX_HM = Regex("(\\d{1,2}):(\\d{2})")
-private val RX_MD = Regex("(\\d{1,2})月(\\d{1,2})日")
-private val RX_D = Regex("(\\d{1,2})日")
-private val RX_WEEK = Regex("[周星期礼拜]([一二三四五六日天])")
+private val RX_MD = Regex("(\\d{1,2})月(\\d{1,2})[日号]")
+private val RX_D = Regex("(\\d{1,2})[日号]")
+// (?<![下个])：把「下周三/下个星期三」让给 RX_NEXTWEEK，别当本周的周三吃掉
+private val RX_WEEK = Regex("(?<![下个])[周星期礼拜]([一二三四五六日天])")
+private val RX_NEXTWEEK = Regex("下(?:周|星期|礼拜)([一二三四五六日天])")
+private val RX_CN_TIME = Regex("(上午|早上|中午|下午|傍晚|晚上|夜里|凌晨)?(\\d{1,2})[点时](半|(\\d{1,2})分?)?")
 
 private val WEEK_MAP = mapOf('一' to 1, '二' to 2, '三' to 3, '四' to 4, '五' to 5, '六' to 6, '日' to 7, '天' to 7)
 
-/** 截止时间分值（毫秒）：remind_at > when_text 显式词；无 → Long.MAX（排最后） */
+/** 中文钟点 → LocalTime：下午三点半=15:30，中午12=12:00，凌晨2=02:00；识别不出 null */
+private fun cnTime(t: String): LocalTime? {
+    val m = RX_CN_TIME.find(t) ?: return null
+    var h = m.groupValues[2].toIntOrNull() ?: return null
+    val half = m.groupValues[3] == "半"
+    val min = m.groupValues[4].toIntOrNull().takeIf { it in 0..59 } ?: 0
+    val ampm = m.groupValues[1]
+    if (h !in 1..12 && ampm.isNotBlank()) return null
+    if (h > 23) return null
+    if ((ampm == "下午" || ampm == "傍晚" || ampm == "晚上" || ampm == "夜里") && h < 12) h += 12
+    if (ampm == "中午" && h < 12) h = 12
+    return try { LocalTime.of(h, if (half) 30 else min) } catch (_: Exception) { null }
+}
+
+private fun parseTime(t: String): LocalTime? = RX_HM.find(t)?.let { m ->
+    try { LocalTime.of(m.groupValues[1].toInt(), m.groupValues[2].toInt()) } catch (_: Exception) { null }
+} ?: cnTime(t)
+
+/** 截止时间分值（毫秒）：remind_at/due_at > when_text 显式词；无 → Long.MAX（排最后） */
 internal fun deadlineScore(whenText: String, remindAt: String?, createdAt: String, now: LocalDateTime): Long {
-    // 1) 联系人待办的 remind_at 是 ISO 时间，最准
+    // 1) 联系人待办 remind_at / 消息待办 due_at 是 ISO 时间，最准
     if (!remindAt.isNullOrBlank()) {
         parseIso(remindAt)?.let { return it }
     }
     val t = whenText.trim()
     if (t.isNotEmpty()) {
-        val hm = RX_HM.find(t)?.destructured
-        val time = hm?.let { try { LocalTime.of(it.component1().toInt(), it.component2().toInt()) } catch (_: Exception) { null } }
-        // 2) 今天 / 明天 / 后天
+        val time = parseTime(t)
+        val eod = time ?: LocalTime.of(23, 59)
+        // 2) 今天 / 明天 / 后天 / 大后天
         val day = when {
-            t.contains("今天") -> now.toLocalDate()
-            t.contains("明天") -> now.toLocalDate().plusDays(1)
+            t.contains("大后天") -> now.toLocalDate().plusDays(3)
             t.contains("后天") -> now.toLocalDate().plusDays(2)
+            t.contains("明天") -> now.toLocalDate().plusDays(1)
+            t.contains("今天") || t.contains("今晚") -> now.toLocalDate()
             else -> null
         }
-        if (day != null) return at(day, time ?: LocalTime.of(23, 59))
-        // 3) 周X/星期X/礼拜X → 下一个该星期几（含今天；与 PC 相对星期口径同向）
+        if (day != null) return at(day, eod)
+        // 3) 下周X → 下个周一再走 (X-1) 天（RX_NEXTWEEK 先于 RX_WEEK）
+        RX_NEXTWEEK.find(t)?.groupValues?.get(1)?.let { ch ->
+            WEEK_MAP[ch.firstOrNull()]?.let { target ->
+                val monday = now.toLocalDate().plusDays((8 - now.dayOfWeek.value).toLong())
+                return at(monday.plusDays((target - 1).toLong()), eod)
+            }
+        }
+        // 4) 周末 → 这个周末（周六；今天周末就算今天）
+        if (t.contains("周末")) {
+            var d = now.toLocalDate()
+            while (d.dayOfWeek.value != 6) d = d.plusDays(1)
+            return at(d, eod)
+        }
+        // 5) 月底 → 本月最后一天
+        if (t.contains("月底") || t.contains("月末")) {
+            return at(now.toLocalDate().withDayOfMonth(now.toLocalDate().lengthOfMonth()), eod)
+        }
+        // 6) 周X/星期X/礼拜X → 下一个该星期几（含今天；与 PC 相对星期口径同向）
         RX_WEEK.find(t)?.groupValues?.get(1)?.let { ch ->
             WEEK_MAP[ch.firstOrNull()]?.let { target ->
                 var d = now.toLocalDate()
@@ -744,20 +788,29 @@ internal fun deadlineScore(whenText: String, remindAt: String?, createdAt: Strin
                     d = d.plusDays(1)
                     guard += 1
                 }
-                return at(d, time ?: LocalTime.of(23, 59))
+                return at(d, eod)
             }
         }
-        // 4) M月D日
+        // 7) M月D日/号（「前」=当天 23:59 语义，日期不变）
         RX_MD.find(t)?.destructured?.let { d ->
             try {
-                return at(LocalDate.of(now.year, d.component1().toInt(), d.component2().toInt()), time ?: LocalTime.of(23, 59))
+                return at(LocalDate.of(now.year, d.component1().toInt(), d.component2().toInt()), eod)
             } catch (_: Exception) {
             }
         }
-        // 5) 纯 HH:MM（今天）
+        // 8) 纯 D日/号（本月内；已过则下月同日，防"25号"在 26 号解析成过去）
+        RX_D.find(t)?.destructured?.let { d ->
+            try {
+                var dd = LocalDate.of(now.year, now.month, d.component1().toInt())
+                if (dd.isBefore(now.toLocalDate())) dd = dd.plusMonths(1)
+                return at(dd, eod)
+            } catch (_: Exception) {
+            }
+        }
+        // 9) 纯钟点（今天）
         if (time != null) return at(now.toLocalDate(), time)
     }
-    // 6) created_at 兜底不参与排序（避免新建的永远沉底/置顶），判无期限
+    // 10) created_at 兜底不参与排序（避免新建的永远沉底/置顶），判无期限
     return Long.MAX_VALUE
 }
 
@@ -785,10 +838,15 @@ internal fun dueLabel(remindAt: String?, whenText: String, now: LocalDateTime): 
     }
     val t = whenText.trim()
     if (t.isNotEmpty()) {
+        RX_NEXTWEEK.find(t)?.value?.let { return "截止 " + it }
+        if (t.contains("周末")) return "截止 周末"
+        if (t.contains("月底") || t.contains("月末")) return "截止 月底"
         RX_WEEK.find(t)?.value?.let { return "截止 " + t.take(12) }
-        if (t.contains("今天") || t.contains("明天") || t.contains("后天")) return "截止 " + t.take(12)
+        if (t.contains("今天") || t.contains("今晚") || t.contains("明天") || t.contains("后天") || t.contains("大后天")) return "截止 " + t.take(12)
         RX_MD.find(t)?.value?.let { return "截止 " + it }
+        RX_D.find(t)?.value?.let { return "截止 " + it }
         RX_HM.find(t)?.value?.let { return "截止 " + it }
+        cnTime(t)?.let { return "截止 " + t.take(12) }
     }
     return "无期限"
 }

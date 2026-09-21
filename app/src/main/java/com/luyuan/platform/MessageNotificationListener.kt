@@ -12,6 +12,7 @@ import com.luyuan.data.MessageSettings
 import com.luyuan.data.MessageTodoExtractor
 import com.luyuan.data.PendingMessageTodo
 import com.luyuan.data.PendingMessageTodoStore
+import com.luyuan.data.TodoStore
 import java.util.concurrent.Executors
 
 /**
@@ -186,7 +187,7 @@ class MessageNotificationListener : NotificationListenerService() {
                             continue
                         }
                         for (t in tasks) {
-                            val todo = PendingMessageTodo(
+                            val p = PendingMessageTodo(
                                 id = PendingMessageTodoStore.newId(),
                                 text = t.text,
                                 who = t.who,
@@ -197,13 +198,32 @@ class MessageNotificationListener : NotificationListenerService() {
                                 sender = chat,
                                 created_at = PendingMessageTodoStore.nowIso()
                             )
-                            PendingMessageTodoStore.add(ctx, todo)
-                            notifyTodoAction(ctx, todo)
+                            // vc107 路河拍板：截止在明天及以后的任务直接进待办不用问；
+                            // 今天到期 / 没识别出截止的仍走待确认（他点头才入库）
+                            val due = parseDue(t.dueIso)
+                            if (due != null && due.toLocalDate().isAfter(java.time.LocalDate.now())) {
+                                val ok = try { TodoStore.createFromPending(ctx, p) } catch (_: Throwable) { false }
+                                if (ok) notifyTodoAction(ctx, p, autoAdded = true)
+                            } else {
+                                PendingMessageTodoStore.add(ctx, p)
+                                notifyTodoAction(ctx, p, autoAdded = false)
+                            }
                         }
                     }
                     for (m in failed) MessageBuffer.append(ctx, m)
                 } catch (_: Throwable) {
                 }
+            }
+        }
+
+        /** due_iso → LocalDateTime（OffsetDateTime 优先，退化截 19 位按本地时区）；空/坏 → null */
+        private fun parseDue(iso: String): java.time.LocalDateTime? {
+            val s = iso.trim()
+            if (s.isEmpty()) return null
+            return try {
+                java.time.OffsetDateTime.parse(s).toLocalDateTime()
+            } catch (_: Throwable) {
+                try { java.time.LocalDateTime.parse(s.take(19)) } catch (_: Throwable) { null }
             }
         }
 
@@ -215,9 +235,10 @@ class MessageNotificationListener : NotificationListenerService() {
             }
         }
 
-        /** 抽中消息待办后发一条带「已完成/收下/不要」的通知（vc85 通知重绘：Compat 构建+品牌图标+深绿主题；
-         *  点通知本体直达待办页（09-18 检查批） */
-        private fun notifyTodoAction(ctx: Context, p: PendingMessageTodo) {
+        /** 抽中任务后的通知（vc85 重绘+vc107 分流）：
+         *  autoAdded=true = 已直接入库（明天及以后截止），通知只带「已完成/不要」直操正式库；
+         *  autoAdded=false = 落待确认队列，带「已完成/收下/不要」三键走老路径 */
+        private fun notifyTodoAction(ctx: Context, p: PendingMessageTodo, autoAdded: Boolean) {
             try {
                 ReminderNotifications.ensureChannel(ctx)
                 val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
@@ -228,10 +249,11 @@ class MessageNotificationListener : NotificationListenerService() {
                     ctx, 0, tapIntent,
                     android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
                 )
-                fun pi(action: String, requestCode: Int) = android.app.PendingIntent.getBroadcast(
+                fun pi(action: String, requestCode: Int, todoId: String? = null) = android.app.PendingIntent.getBroadcast(
                     ctx, requestCode,
                     android.content.Intent(action).setPackage(ctx.packageName)
                         .putExtra(TodoActionReceiver.EXTRA_ID, p.id)
+                        .apply { if (todoId != null) putExtra(TodoActionReceiver.EXTRA_TODO_ID, todoId) }
                         .setClass(ctx, TodoActionReceiver::class.java),
                     android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
                 )
@@ -243,15 +265,25 @@ class MessageNotificationListener : NotificationListenerService() {
                 val builder = androidx.core.app.NotificationCompat.Builder(ctx, ReminderNotifications.CHANNEL_TODO)
                     .setSmallIcon(com.luyuan.R.drawable.ic_stat_luyuan)
                     .setColor(0xFF224A3A.toInt())
-                    .setContentTitle("消息待办 · $who")
+                    .setContentTitle(if (autoAdded) "待办已收录 · $who" else "消息待办 · $who")
                     .setContentText(p.text)
                     .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText(big))
                     .setCategory(androidx.core.app.NotificationCompat.CATEGORY_REMINDER)
                     .setAutoCancel(true)
                     .setContentIntent(tap)
-                    .addAction(android.R.drawable.checkbox_on_background, "已完成", pi(TodoActionReceiver.ACTION_DONE, p.id.hashCode() * 10 + 1))
-                    .addAction(android.R.drawable.ic_menu_agenda, "收下", pi(TodoActionReceiver.ACTION_KEEP, p.id.hashCode() * 10 + 3))
-                    .addAction(android.R.drawable.ic_menu_close_clear_cancel, "不要", pi(TodoActionReceiver.ACTION_DROP, p.id.hashCode() * 10 + 2))
+                if (autoAdded) {
+                    builder.addAction(android.R.drawable.checkbox_on_background, "已完成",
+                        pi(TodoActionReceiver.ACTION_DONE, p.id.hashCode() * 10 + 1, p.id))
+                    builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, "不要",
+                        pi(TodoActionReceiver.ACTION_DROP, p.id.hashCode() * 10 + 2, p.id))
+                } else {
+                    builder.addAction(android.R.drawable.checkbox_on_background, "已完成",
+                        pi(TodoActionReceiver.ACTION_DONE, p.id.hashCode() * 10 + 1))
+                    builder.addAction(android.R.drawable.ic_menu_agenda, "收下",
+                        pi(TodoActionReceiver.ACTION_KEEP, p.id.hashCode() * 10 + 3))
+                    builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, "不要",
+                        pi(TodoActionReceiver.ACTION_DROP, p.id.hashCode() * 10 + 2))
+                }
                 nm.notify(TodoActionReceiver.TAG, p.id.hashCode(), builder.build())
             } catch (_: Throwable) {
                 // 发通知失败不影响入库

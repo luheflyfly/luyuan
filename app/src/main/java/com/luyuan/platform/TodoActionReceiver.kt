@@ -12,6 +12,20 @@ import com.luyuan.data.TodoStore
  */
 class TodoActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        // vc107：自动收录的正式待办（路河拍板「明天及以后直接入库不用问」）走这条——
+        // 已完成=setDone(true)，不要=软删墓碑。与待确认动作共用一个 Receiver 省一个清单项。
+        val todoId = intent.getStringExtra(EXTRA_TODO_ID)
+        if (todoId != null) {
+            when (intent.action) {
+                ACTION_DONE -> try { TodoStore.setDone(context, todoId, true) } catch (_: Throwable) { }
+                ACTION_DROP -> try { TodoStore.deleteSoft(context, todoId) } catch (_: Throwable) { }
+            }
+            try {
+                val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+                nm.cancel(TAG, todoId.hashCode())
+            } catch (_: Throwable) { }
+            return
+        }
         val id = intent.getStringExtra(EXTRA_ID) ?: return
         val pending = PendingMessageTodoStore.list(context).firstOrNull { it.id == id } ?: return
         when (intent.action) {
@@ -40,6 +54,7 @@ class TodoActionReceiver : BroadcastReceiver() {
         const val ACTION_DROP = "com.luyuan.action.TODO_DROP"
         const val ACTION_KEEP = "com.luyuan.action.TODO_KEEP"
         const val EXTRA_ID = "todo_id"
+        const val EXTRA_TODO_ID = "todo_id_confirmed"   // vc107：正式库待办 id（自动收录通知用）
         const val TAG = "msg_todo"
     }
 }
