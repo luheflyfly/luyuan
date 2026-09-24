@@ -219,7 +219,7 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
         Triple(
             rows.filter { !it.isPending && (it.score == Long.MAX_VALUE || it.score >= ms) },
             rows.filter { !it.isPending && it.score != Long.MAX_VALUE && it.score < ms },
-            rows.filter { it.isPending }
+            rows.filter { it.isPending }.mapNotNull { it.pendingItem }
         )
     }
 
