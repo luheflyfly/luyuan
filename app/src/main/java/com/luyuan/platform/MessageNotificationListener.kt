@@ -198,16 +198,11 @@ class MessageNotificationListener : NotificationListenerService() {
                                 sender = chat,
                                 created_at = PendingMessageTodoStore.nowIso()
                             )
-                            // vc107 路河拍板：截止在明天及以后的任务直接进待办不用问；
-                            // 今天到期 / 没识别出截止的仍走待确认（他点头才入库）
-                            val due = parseDue(t.dueIso)
-                            if (due != null && due.toLocalDate().isAfter(java.time.LocalDate.now())) {
-                                val ok = try { TodoStore.createFromPending(ctx, p) } catch (_: Throwable) { false }
-                                if (ok) notifyTodoAction(ctx, p, autoAdded = true)
-                            } else {
-                                PendingMessageTodoStore.add(ctx, p)
-                                notifyTodoAction(ctx, p, autoAdded = false)
-                            }
+                            // vc108 路河拍板：待确认退役——四道闸滤掉垃圾后剩下的真任务
+                            // 全部直接入库（睡一觉会忘的该收，马上顺手做掉的问了也白问）；
+                            // 通知即收据，「已完成/不要」两键随时反悔。待确认页只管存量。
+                            val ok = try { TodoStore.createFromPending(ctx, p) } catch (_: Throwable) { false }
+                            if (ok) notifyTodoAction(ctx, p, autoAdded = true)
                         }
                     }
                     for (m in failed) MessageBuffer.append(ctx, m)
@@ -216,7 +211,7 @@ class MessageNotificationListener : NotificationListenerService() {
             }
         }
 
-        /** due_iso → LocalDateTime（OffsetDateTime 优先，退化截 19 位按本地时区）；空/坏 → null */
+        /** vc107 引入；vc108 待确认退役后暂无调用方，保留给「低置信兜底」未来用 */
         private fun parseDue(iso: String): java.time.LocalDateTime? {
             val s = iso.trim()
             if (s.isEmpty()) return null

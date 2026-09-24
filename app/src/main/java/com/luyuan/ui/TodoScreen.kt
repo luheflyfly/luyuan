@@ -89,6 +89,23 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
         com.luyuan.platform.MessageNotificationListener.flushDueNow(context)
     }
     androidx.compose.runtime.LaunchedEffect(Unit) { reload() }
+    // vc108 热刷新两路（路河：通知弹了待办、界面不立即刷新）：
+    // ①从通知/别的页回到本页（ON_RESUME）即重读盘；②页面一直开着时每 30s 重读。
+    // 只局部读盘，不碰 vm.refresh()（09-15 教训：返回笔记页卡死）。
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
+            if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) reload()
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(30_000)
+            reload()
+        }
+    }
 
     fun keep(p: PendingMessageTodo) {
         try {
@@ -195,6 +212,17 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
             .filter { !MessageSettings.isExcluded(context, it.who) && !MessageSettings.isExcluded(context, it.sender) }
     }
 
+    // vc108 三视图拆分（路河拍板）：活任务（列表/时间轴）/ 待确认（单开一页）/ 已过期（单开一页）。
+    // 待确认从列表/时间轴里整体移出；过期的从主视图移出只在过期页出现。
+    val (activeRows, expiredRows, pendingRows) = remember(rows) {
+        val ms = System.currentTimeMillis()
+        Triple(
+            rows.filter { !it.isPending && (it.score == Long.MAX_VALUE || it.score >= ms) },
+            rows.filter { !it.isPending && it.score != Long.MAX_VALUE && it.score < ms },
+            rows.filter { it.isPending }
+        )
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -207,7 +235,7 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
                         Text("待办", fontWeight = FontWeight.Bold)
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            "未办 ${rows.size} 件",
+                            "未办 ${activeRows.size} 件",
                             fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -227,7 +255,7 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
                 .fillMaxSize()
                 .padding(pad)
         ) {
-            // vc98：列表 / 时间轴视角（时间轴=截止日期小页，路河拍板）
+            // vc108：四视角（路河拍板）——列表 / 时间轴 / 待确认（单开一页）/ 已过期（单开一页）
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 2.dp)
@@ -235,8 +263,41 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
                 SegChip("列表", view == "list") { view = "list" }
                 Spacer(Modifier.width(8.dp))
                 SegChip("时间轴", view == "timeline") { view = "timeline" }
+                Spacer(Modifier.width(8.dp))
+                SegChip("待确认·${pendingRows.size}", view == "pending") { view = "pending" }
+                Spacer(Modifier.width(8.dp))
+                SegChip("已过期·${expiredRows.size}", view == "expired") { view = "expired" }
             }
-            if (view == "list") {
+            if (view == "pending") {
+                PendingSection(
+                    items = pendingRows,
+                    onKeep = { keep(it) },
+                    onDiscard = { discard(it) },
+                    onComplete = { completePending(it) },
+                    onExclude = { excludeTarget = it },
+                    onClearAll = {
+                        for (p in pendingRows) PendingMessageTodoStore.remove(context, p.id)
+                        reload()
+                    }
+                )
+            } else if (view == "expired") {
+                ExpiredSection(
+                    trows = expiredRows.map {
+                        TRow(it.key, it.text, it.who, it.score, it.dueLabel, it.origin, it.isPending)
+                    },
+                    onToggle = { key ->
+                        if (key.startsWith("msg_")) {
+                            msgTodos.firstOrNull { it.id == key.removePrefix("msg_") }?.let { toggleMsg(it) }
+                        } else {
+                            val parts = key.removePrefix("ct_").split("_", limit = 2)
+                            if (parts.size == 2) { vm.toggleContactTodo(parts[0], parts[1]); reload() }
+                        }
+                    },
+                    onDelete = { key ->
+                        msgTodos.firstOrNull { it.id == key.removePrefix("msg_") }?.let { deleteTarget = it }
+                    }
+                )
+            } else if (view == "list") {
         LazyColumn(
             contentPadding = PaddingValues(bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -246,15 +307,15 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
         ) {
             item(key = "sec_open") {
                 Text(
-                    "未办 ${rows.size} 件 · 按截止时间排序",
+                    "未办 ${activeRows.size} 件 · 按截止时间排序",
                     fontWeight = FontWeight.ExtraBold, color = LuyuanColors.Ink2, fontSize = 14.sp,
                     modifier = Modifier.padding(top = 10.dp, bottom = 2.dp)
                 )
             }
-            if (rows.isEmpty()) {
+            if (activeRows.isEmpty()) {
                 item(key = "empty_hint") {
                     Text(
-                        "还没有未办的待办。微信/QQ 消息里的事会自动出现在这里（可点「收下」或直接勾掉）。",
+                        "还没有活着的待办。微信/QQ 消息里的正经事会自动收进来（过期了的在「已过期」页）。",
                         fontSize = 12.sp, color = LuyuanColors.Ink4
                     )
                 }
@@ -286,26 +347,11 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
                     )
                 }
             }
-            for (r in rows) {
+            for (r in activeRows) {
                 item(key = r.key) {
                     val overdue = r.score != Long.MAX_VALUE && r.score < System.currentTimeMillis()
-                    if (r.isPending) {
-                        // ---------- 待确认消息待办（琥珀底：它就是一张待办卡，三动作=通知栏同款） ----------
-                        PendingTodoRow(
-                            p = r.pendingItem!!,
-                            text = r.text,
-                            meta = listOfNotNull(
-                                r.who.takeIf { it.isNotBlank() },
-                                r.dueLabel.takeIf { r.dueLabel != "无期限" }
-                            ).joinToString(" · "),
-                            overdue = overdue,
-                            onKeep = { keep(r.pendingItem) },
-                            onDiscard = { discard(r.pendingItem) },
-                            onComplete = { completePending(r.pendingItem) },
-                            onExclude = { excludeTarget = r.pendingItem }
-                        )
-                    } else {
-                        // ---------- 正式待办（绿圈勾选完成；长按=删除，vc98） ----------
+                    run {
+                        // ---------- 正式待办（绿圈勾选完成；长按=删除，vc98；vc108 待确认移出列表） ----------
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
@@ -401,9 +447,9 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
             }
         }
         } else {
-            // vc98：时间轴小页（路河拍板）——未办按截止日分桶：逾期→今天→明天→…→无期限
-                TimelineView(
-                    trows = rows.map {
+            // vc98：时间轴小页（路河拍板）——未办按截止日分桶；vc108 起过期项移入「已过期」页
+            TimelineView(
+                trows = activeRows.map {
                         TRow(it.key, it.text, it.who, it.score, it.dueLabel, it.origin, it.isPending)
                     },
                     now = now,
@@ -849,4 +895,167 @@ internal fun dueLabel(remindAt: String?, whenText: String, now: LocalDateTime): 
         cnTime(t)?.let { return "截止 " + t.take(12) }
     }
     return "无期限"
+}
+
+// ---------- vc108：待确认页 / 已过期页（单开，路河拍板） ----------
+
+/** 待确认页：存量待确认队列的处理出口——逐条收下/已完成/不要，右上一键清空剩余。
+ *  vc108 起新任务直接进待办（待确认退役），本页只处理历史存量。 */
+@Composable
+private fun PendingSection(
+    items: List<PendingMessageTodo>,
+    onKeep: (PendingMessageTodo) -> Unit,
+    onDiscard: (PendingMessageTodo) -> Unit,
+    onComplete: (PendingMessageTodo) -> Unit,
+    onExclude: (PendingMessageTodo) -> Unit,
+    onClearAll: () -> Unit
+) {
+    var clearOpen by remember { mutableStateOf(false) }
+    LazyColumn(
+        contentPadding = PaddingValues(bottom = 96.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 14.dp)
+    ) {
+        item(key = "ps_head") {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 10.dp, bottom = 2.dp)) {
+                Text(
+                    "待确认 ${items.size} 条",
+                    fontWeight = FontWeight.ExtraBold, color = LuyuanColors.Ink2, fontSize = 14.sp
+                )
+                Spacer(Modifier.weight(1f))
+                if (items.isNotEmpty()) {
+                    Text(
+                        "一键清空", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = LuyuanColors.Red,
+                        modifier = Modifier.clickable { clearOpen = true }
+                    )
+                }
+            }
+        }
+        item(key = "ps_hint") {
+            Text(
+                "新任务已直接进待办，不再经过这里；本页只处理历史存量——收下想要的，剩下的清空。",
+                fontSize = 11.sp, color = LuyuanColors.Ink4
+            )
+        }
+        if (items.isEmpty()) {
+            item(key = "ps_empty") {
+                Text(
+                    "待确认队列空空的。",
+                    fontSize = 12.sp, color = LuyuanColors.Ink4, modifier = Modifier.padding(top = 24.dp)
+                )
+            }
+        }
+        for (p in items) {
+            item(key = "ps_${p.id}") {
+                val meta = listOfNotNull(
+                    p.sender.ifBlank { p.who }.takeIf { it.isNotBlank() },
+                    p.whenText.takeIf { it.isNotBlank() }
+                ).joinToString(" · ")
+                PendingTodoRow(
+                    p = p, text = p.text, meta = meta, overdue = false,
+                    onKeep = { onKeep(p) }, onDiscard = { onDiscard(p) },
+                    onComplete = { onComplete(p) }, onExclude = { onExclude(p) }
+                )
+            }
+        }
+    }
+    if (clearOpen) {
+        AlertDialog(
+            onDismissRequest = { clearOpen = false },
+            title = { Text("清空待确认 ${items.size} 条？", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+            text = { Text("还没收下的全部丢弃；已经收下/完成的不受影响。", fontSize = 13.sp) },
+            confirmButton = {
+                TextButton(onClick = { onClearAll(); clearOpen = false }) {
+                    Text("清空", color = LuyuanColors.Red, fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = { TextButton(onClick = { clearOpen = false }) { Text("取消") } }
+        )
+    }
+}
+
+/** 已过期页：过了截止还没办掉的正式待办——从列表/时间轴移出，集中处理。 */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ExpiredSection(
+    trows: List<TRow>,
+    onToggle: (String) -> Unit,
+    onDelete: (String) -> Unit
+) {
+    LazyColumn(
+        contentPadding = PaddingValues(bottom = 96.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 14.dp)
+    ) {
+        item(key = "ex_head") {
+            Text(
+                "已过期 ${trows.size} 件",
+                fontWeight = FontWeight.ExtraBold, color = LuyuanColors.Ink2, fontSize = 14.sp,
+                modifier = Modifier.padding(top = 10.dp, bottom = 2.dp)
+            )
+        }
+        item(key = "ex_hint") {
+            Text(
+                "过了截止还没办掉的。办完打勾，不用办的长按删除；不动它也不会再烦你。",
+                fontSize = 11.sp, color = LuyuanColors.Ink4
+            )
+        }
+        if (trows.isEmpty()) {
+            item(key = "ex_empty") {
+                Text(
+                    "没有过期积压，很干净。",
+                    fontSize = 12.sp, color = LuyuanColors.Ink4, modifier = Modifier.padding(top = 24.dp)
+                )
+            }
+        }
+        for (r in trows) {
+            item(key = "ex_${r.key}") {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(14.dp))
+                        .then(
+                            if (r.key.startsWith("msg_")) Modifier.combinedClickable(
+                                onClick = {},
+                                onLongClick = { onDelete(r.key) }
+                            ) else Modifier
+                        )
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(22.dp)
+                            .border(1.6.dp, LuyuanColors.Green700, CircleShape)
+                            .clickable { onToggle(r.key) }
+                    ) {
+                        Icon(Icons.Default.Check, "完成", tint = LuyuanColors.Green700, modifier = Modifier.size(13.dp))
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            r.text, fontSize = 13.sp, color = LuyuanColors.Ink3,
+                            maxLines = 2, overflow = TextOverflow.Ellipsis
+                        )
+                        Row {
+                            Text(
+                                r.dueLabel, fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold, color = LuyuanColors.Red
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                (r.who + " · " + r.origin).trim(' ', '·'),
+                                fontSize = 10.sp, color = LuyuanColors.Ink4
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
