@@ -1,6 +1,7 @@
 package com.luyuan.data
 
 import android.content.Context
+import com.luyuan.platform.StorageLocator
 import java.io.File
 import java.io.FileOutputStream
 import java.time.Instant
@@ -30,7 +31,8 @@ object RecordingRescue {
         var discarded = 0
 
         // ① vc109 capture 标记
-        for (mark in dir.listFiles { f -> f.isFile && f.name.endsWith(".capture") } ?: emptyArray()) {
+        val marks = (dir.listFiles() ?: emptyArray()).filter { it.isFile && it.name.endsWith(".capture") }
+        for (mark in marks) {
             try {
                 val lines = mark.readText().lines()
                 val startedAt = lines.getOrNull(0)?.toLongOrNull() ?: 0L
@@ -53,7 +55,8 @@ object RecordingRescue {
         }
 
         // ② 旧版 .pcm.tmp 孤儿（vc109 前方案）
-        for (tmp in dir.listFiles { f -> f.isFile && f.name.endsWith(".wav.pcm.tmp") } ?: emptyArray()) {
+        val tmps = (dir.listFiles() ?: emptyArray()).filter { it.isFile && it.name.endsWith(".wav.pcm.tmp") }
+        for (tmp in tmps) {
             try {
                 val wavName = tmp.name.removeSuffix(".pcm.tmp")
                 val wav = File(dir, wavName)
