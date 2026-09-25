@@ -30,13 +30,22 @@ class LuyuanService : Service() {
         val notification = Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("路远正在录音")
             .setContentText(text)
+            .setWhen(System.currentTimeMillis())
+            // vc109 P2：通知栏自带跳动计时，不用轮询更新通知（Diktafon 同款）
+            .setUsesChronometer(true)
             // vc85 通知重绘：品牌小图标+主题色（原 android.R 老喇叭与全 App 不搭）
             .setSmallIcon(com.luyuan.R.drawable.ic_stat_luyuan)
             .setColor(0xFF224A3A.toInt())
             .setOngoing(true)
             .build()
-        startForeground(NOTI_ID, notification)
-        return START_STICKY
+        // vc109 P2：显式声明麦克风前台服务类型（manifest 已声明，调用侧配对，targetSdk 34 更稳）
+        androidx.core.app.ServiceCompat.startForeground(
+            this, NOTI_ID, notification,
+            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        )
+        // vc109 P2：START_STICKY→NOT_STICKY——系统自己拉起的空服务守不住任何东西，
+        // 只会挂着「正在录音」的假通知（没在录也说在录）
+        return START_NOT_STICKY
     }
 
     private fun createChannel() {

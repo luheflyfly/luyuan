@@ -117,6 +117,8 @@ class MainActivity : ComponentActivity() {
             )
         )
         com.luyuan.platform.CrashLogger.install(this)
+        // vc109 P1 录音崩溃抢救：启动即扫残留 capture 标记/旧版 pcm.tmp 孤儿，后台线程跑（不阻塞 UI）
+        Thread { com.luyuan.data.RecordingRescue.scanAndRescue(this) }.start()
         autoRoute = routeFromIntent(intent)
         setContent {
             LuyuanTheme {

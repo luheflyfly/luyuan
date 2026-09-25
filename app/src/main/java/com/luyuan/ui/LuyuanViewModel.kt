@@ -739,6 +739,7 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun stopWavRecording() {
+        val rec = wavRecorder
         wavRecorder?.stop()
         wavRecorder = null
         try {
@@ -752,6 +753,9 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
         wavId = null
         if (id == null) return
         viewModelScope.launch(Dispatchers.IO) {
+            // vc109 P6：等录音线程 finalize（WAV 头修好、流关死）再落库——
+            // 文件随 Syncthing 出去时必须是成品，join 超时不代表写完了
+            rec?.awaitReady()
             val now = NoteRepository.nowIso()
             NoteRepository.saveNote(
                 ctx,
@@ -794,6 +798,7 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun stopOfflineRecording() {
         val id = wavId
+        val rec = wavRecorder
         wavRecorder?.stop()
         wavRecorder = null
         try {
@@ -809,6 +814,8 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             val now = NoteRepository.nowIso()
             val wav = java.io.File(StorageLocator.audioDir(ctx), "$id.wav")
+            // vc109 P6：转写前等 finalize——join 超时后旧代码紧跟着读 WAV 会踩空（长录音/慢盘）
+            rec?.awaitReady()
             val text = try {
                 com.luyuan.data.OfflineStt.transcribeWav(ctx, wav)
             } catch (t: Throwable) {
