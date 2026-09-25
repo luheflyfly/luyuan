@@ -1,6 +1,7 @@
 package com.luyuan.data
 
 import android.content.Context
+import com.luyuan.domain.Note
 import com.luyuan.platform.StorageLocator
 import java.io.File
 import java.io.FileOutputStream
