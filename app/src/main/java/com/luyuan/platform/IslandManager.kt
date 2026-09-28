@@ -43,7 +43,6 @@ object IslandManager {
     private enum class Mode { RECORDING, TODO, REMINDER, BRIEF }
 
     private var mode: Mode? = null
-    private var expanded = false
 
     // 录音态（LuyuanService 驱动；数据只在主线程读写）
     private var recording = false
@@ -159,7 +158,7 @@ object IslandManager {
     }
 
     private fun show(m: Mode, autoHideMs: Long) {
-        mode = m; expanded = false
+        mode = m
         unpost(hider); unpost(ticker)
         hider = null; ticker = null
         // 本机实测（MagicOS/OriginOS 2026-09-28）：悬浮窗原地换内容必塌宽（连计时器刷文字
@@ -175,16 +174,7 @@ object IslandManager {
         }
     }
 
-    /** 点击展开/收起：整窗拆掉重挂（原地 rebuild 在本机会塌宽，见 show 注释） */
-    private fun toggle() {
-        expanded = !expanded
-        log("toggle -> expanded=$expanded mode=$mode")
-        removeWindowNow()
-        if (!ensureWindow()) { log("toggle ensureWindow FAILED"); return }
-        rebuild()
-        pop()
-    }
-
+    /** 点胶囊=直接开 App（展开态在本机悬浮窗测量有系统级坑，2026-09-28 拍板砍掉，下批再战） */
     private fun removeWindowNow() {
         val box = root ?: return
         root = null; added = false; pillText = null
@@ -238,17 +228,17 @@ object IslandManager {
         pillText = null
         try {
             when (mode) {
-                Mode.RECORDING -> if (expanded) recExpanded(c, box) else recCompact(c, box)
-                Mode.TODO -> if (expanded) todoExpanded(c, box) else textCompact(c, box, todoBody)
-                Mode.REMINDER -> if (expanded) remExpanded(c, box) else textCompact(c, box, remBody)
-                Mode.BRIEF -> if (expanded) briefExpanded(c, box) else textCompact(c, box, briefBody)
+                Mode.RECORDING -> recCompact(c, box)
+                Mode.TODO -> textCompact(c, box, todoBody)
+                Mode.REMINDER -> textCompact(c, box, remBody)
+                Mode.BRIEF -> textCompact(c, box, briefBody)
                 null -> Unit
             }
         } catch (e: Throwable) {
-            log("rebuild THREW mode=$mode expanded=$expanded: $e")
+            log("rebuild THREW mode=$mode: $e")
             for (s in e.stackTrace.take(8)) log("  at $s")
         }
-        log("rebuilt mode=$mode expanded=$expanded childCount=${box.childCount}")
+        log("rebuilt mode=$mode childCount=${box.childCount}")
     }
 
     private fun log(m: String) {
@@ -260,7 +250,7 @@ object IslandManager {
         hider = null; ticker = null
         val box = root ?: return
         root = null; added = false
-        expanded = false; mode = null; pillText = null
+        mode = null; pillText = null
         try {
             box.animate().translationY(-dip(20f).toFloat()).alpha(0f).setDuration(160L)
                 .withEndAction { try { wm?.removeView(box) } catch (_: Throwable) { } }
@@ -287,28 +277,10 @@ object IslandManager {
         pillText = tv
         row.addView(tv)
         row.setOnClickListener { v ->
-            try { toggle() } catch (_: Throwable) { }
+            try { openApp(null) } catch (_: Throwable) { }
         }
         box.addView(row)
         startTicker()
-    }
-
-    private fun recExpanded(c: Context, box: LinearLayout) {
-        // 展开态也用单横排（真灵动岛同款宽胶囊）：本机实测竖排多控件树在悬浮窗里量不对，
-        // 横排单行结构（与收起态同族）始终正确
-        val row = hrow(c)
-        row.background = cardBg()
-        row.setPadding(dip(14f), dip(8f), dip(14f), dip(8f))
-        row.gravity = Gravity.CENTER_VERTICAL
-        row.addView(dot(c))
-        row.addView(gap(8))
-        row.addView(label(c, if (recordPaused) "录音已暂停" else "路远正在录音", bold = true))
-        row.addView(gap(12))
-        row.addView(button(c, "打开路远", BTN_GREEN) { v -> openApp(null) })
-        row.setOnClickListener { v ->
-            try { toggle() } catch (_: Throwable) { }
-        }
-        box.addView(row)
     }
 
     private fun textCompact(c: Context, box: LinearLayout, body: String) {
@@ -323,67 +295,14 @@ object IslandManager {
         pillText = tv
         row.addView(tv)
         row.setOnClickListener { v ->
-            try { toggle() } catch (_: Throwable) { }
-        }
-        box.addView(row)
-    }
-
-    private fun todoExpanded(c: Context, box: LinearLayout) {
-        val row = hrow(c)
-        row.background = cardBg()
-        row.setPadding(dip(10f), dip(8f), dip(14f), dip(8f))
-        row.gravity = Gravity.CENTER_VERTICAL
-        row.addView(leaf(c, dip(22f)))
-        row.addView(gap(8))
-        val t = label(c, "待办已收录 · $todoWho：${todoBody.replace("\n", " ")}", bold = false)
-        t.maxWidth = dip(240f)
-        row.addView(t)
-        row.addView(gap(12))
-        row.addView(button(c, "已完成", BTN_GREEN) { v -> act(TodoActionReceiver.ACTION_DONE) })
-        row.addView(gap(8))
-        row.addView(button(c, "不要", BTN_GRAY) { v -> act(TodoActionReceiver.ACTION_DROP) })
-        if (!todoAutoAdded) {
-            row.addView(gap(8))
-            row.addView(button(c, "收下", BTN_GRAY) { v -> act(TodoActionReceiver.ACTION_KEEP) })
-        }
-        row.setOnClickListener { v ->
-            try { toggle() } catch (_: Throwable) { }
-        }
-        box.addView(row)
-    }
-
-    private fun remExpanded(c: Context, box: LinearLayout) {
-        val row = hrow(c)
-        row.background = cardBg()
-        row.setPadding(dip(10f), dip(8f), dip(14f), dip(8f))
-        row.gravity = Gravity.CENTER_VERTICAL
-        row.addView(leaf(c, dip(22f)))
-        row.addView(gap(8))
-        val t = label(c, "$remTitle：${remBody.replace("\n", " ")}", bold = false)
-        t.maxWidth = dip(250f)
-        row.addView(t)
-        row.addView(gap(12))
-        row.addView(button(c, "打开", BTN_GREEN) { v -> openApp(remDetailId) })
-        row.setOnClickListener { v ->
-            try { toggle() } catch (_: Throwable) { }
-        }
-        box.addView(row)
-    }
-
-    private fun briefExpanded(c: Context, box: LinearLayout) {
-        val row = hrow(c)
-        row.background = cardBg()
-        row.setPadding(dip(10f), dip(8f), dip(14f), dip(8f))
-        row.gravity = Gravity.CENTER_VERTICAL
-        row.addView(leaf(c, dip(22f)))
-        row.addView(gap(8))
-        val t = label(c, "今日简报：${briefBody.replace("\n", " ")}", bold = false)
-        t.maxWidth = dip(280f)
-        row.addView(t)
-        row.addView(gap(12))
-        row.addView(button(c, "打开路远", BTN_GREEN) { v -> openApp(null) })
-        row.setOnClickListener { v ->
-            try { toggle() } catch (_: Throwable) { }
+            try {
+                when (mode) {
+                    Mode.REMINDER -> openApp(remDetailId)
+                    Mode.TODO -> openApp(null, "todos")
+                    Mode.BRIEF -> openApp(null, "notes")
+                    else -> openApp(null)
+                }
+            } catch (_: Throwable) { }
         }
         box.addView(row)
     }
@@ -394,7 +313,7 @@ object IslandManager {
         val run = object : Runnable {
             override fun run() {
                 try {
-                    if (!recording || mode != Mode.RECORDING || expanded) return
+                    if (!recording || mode != Mode.RECORDING) return
                     pillText?.text = recLabel()
                 } catch (_: Throwable) { }
                 main.postDelayed(this, 500L)
@@ -425,13 +344,14 @@ object IslandManager {
         hideNow()
     }
 
-    private fun openApp(detailId: String?) {
+    private fun openApp(detailId: String?, page: String? = null) {
         val c = appCtx ?: return
         try {
             val i = c.packageManager.getLaunchIntentForPackage(c.packageName)
                 ?: Intent(c, MainActivity::class.java)
             i.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             if (detailId != null) i.putExtra("detailId", detailId)
+            if (page != null) i.putExtra("page", page)
             c.startActivity(i)
         } catch (_: Throwable) { }
         hideNow()
@@ -469,15 +389,6 @@ object IslandManager {
         ellipsize = TextUtils.TruncateAt.END
     }
 
-    private fun sub(c: Context, text: String): TextView = TextView(c).apply {
-        this.text = text
-        setTextColor(Color.parseColor("#CCFFFFFF"))
-        textSize = 13.5f
-        maxLines = 5
-        ellipsize = TextUtils.TruncateAt.END
-        maxWidth = dip(280f)
-    }
-
     private fun button(c: Context, text: String, bg: String, onClick: (View) -> Unit): TextView =
         TextView(c).apply {
             this.text = text
@@ -495,15 +406,8 @@ object IslandManager {
     private fun hrow(c: Context): LinearLayout =
         LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL }
 
-    private fun vcol(c: Context): LinearLayout =
-        LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
-
     private fun gap(dp: Int): View = View(appCtx!!).apply {
         layoutParams = LinearLayout.LayoutParams(dip(dp.toFloat()), 1)
-    }
-
-    private fun gapV(dp: Int): View = View(appCtx!!).apply {
-        layoutParams = LinearLayout.LayoutParams(1, dip(dp.toFloat()))
     }
 
     private fun pop() {
