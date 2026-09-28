@@ -179,8 +179,9 @@ object IslandManager {
     /** 点击展开/收起：整窗拆掉重挂（原地 rebuild 在本机会塌宽，见 show 注释） */
     private fun toggle() {
         expanded = !expanded
+        log("toggle -> expanded=$expanded mode=$mode")
         removeWindowNow()
-        if (!ensureWindow()) return
+        if (!ensureWindow()) { log("toggle ensureWindow FAILED"); return }
         rebuild()
         pop()
     }
@@ -188,7 +189,7 @@ object IslandManager {
     private fun removeWindowNow() {
         val box = root ?: return
         root = null; added = false; pillText = null
-        try { wm?.removeView(box) } catch (_: Throwable) { }
+        try { wm?.removeView(box); log("window removed") } catch (e: Throwable) { log("removeView threw: $e") }
     }
 
     /** 加窗。悬浮窗权限没授/系统拒绝=返回 false，胶囊整体静默。 */
@@ -231,13 +232,23 @@ object IslandManager {
         val box = root ?: return
         box.removeAllViews()
         pillText = null
-        when (mode) {
-            Mode.RECORDING -> if (expanded) recExpanded(c, box) else recCompact(c, box)
-            Mode.TODO -> if (expanded) todoExpanded(c, box) else textCompact(c, box, todoBody)
-            Mode.REMINDER -> if (expanded) remExpanded(c, box) else textCompact(c, box, remBody)
-            Mode.BRIEF -> if (expanded) briefExpanded(c, box) else textCompact(c, box, briefBody)
-            null -> Unit
+        try {
+            when (mode) {
+                Mode.RECORDING -> if (expanded) recExpanded(c, box) else recCompact(c, box)
+                Mode.TODO -> if (expanded) todoExpanded(c, box) else textCompact(c, box, todoBody)
+                Mode.REMINDER -> if (expanded) remExpanded(c, box) else textCompact(c, box, remBody)
+                Mode.BRIEF -> if (expanded) briefExpanded(c, box) else textCompact(c, box, briefBody)
+                null -> Unit
+            }
+        } catch (e: Throwable) {
+            log("rebuild THREW mode=$mode expanded=$expanded: $e")
+            for (s in e.stackTrace.take(8)) log("  at $s")
         }
+        log("rebuilt mode=$mode expanded=$expanded childCount=${box.childCount}")
+    }
+
+    private fun log(m: String) {
+        try { android.util.Log.d("IslandMgr", m) } catch (_: Throwable) { }
     }
 
     private fun hideNow() {
