@@ -259,6 +259,8 @@ class MessageNotificationListener : NotificationListenerService() {
                 }
                 val builder = androidx.core.app.NotificationCompat.Builder(ctx, ReminderNotifications.CHANNEL_TODO)
                     .setSmallIcon(com.luyuan.R.drawable.ic_stat_luyuan)
+                    // vc111：vivo 通知卡不解析自适应图标（兜底成机器人）——自带运行时绘制的大叶盘
+                    .setLargeIcon(NotiStyle.brandLargeIcon(ctx))
                     .setColor(0xFF224A3A.toInt())
                     .setContentTitle(if (autoAdded) "待办已收录 · $who" else "消息待办 · $who")
                     .setContentText(p.text)
@@ -267,18 +269,21 @@ class MessageNotificationListener : NotificationListenerService() {
                     .setAutoCancel(true)
                     .setContentIntent(tap)
                 if (autoAdded) {
-                    builder.addAction(android.R.drawable.checkbox_on_background, "已完成",
+                    // vc111：动作键换品牌白线条图标（原 android.R 老图与全 App 不搭）
+                    builder.addAction(com.luyuan.R.drawable.ic_act_done, "已完成",
                         pi(TodoActionReceiver.ACTION_DONE, p.id.hashCode() * 10 + 1, p.id))
-                    builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, "不要",
+                    builder.addAction(com.luyuan.R.drawable.ic_act_drop, "不要",
                         pi(TodoActionReceiver.ACTION_DROP, p.id.hashCode() * 10 + 2, p.id))
                 } else {
-                    builder.addAction(android.R.drawable.checkbox_on_background, "已完成",
+                    builder.addAction(com.luyuan.R.drawable.ic_act_done, "已完成",
                         pi(TodoActionReceiver.ACTION_DONE, p.id.hashCode() * 10 + 1))
-                    builder.addAction(android.R.drawable.ic_menu_agenda, "收下",
+                    builder.addAction(com.luyuan.R.drawable.ic_act_keep, "收下",
                         pi(TodoActionReceiver.ACTION_KEEP, p.id.hashCode() * 10 + 3))
-                    builder.addAction(android.R.drawable.ic_menu_close_clear_cancel, "不要",
+                    builder.addAction(com.luyuan.R.drawable.ic_act_drop, "不要",
                         pi(TodoActionReceiver.ACTION_DROP, p.id.hashCode() * 10 + 2))
                 }
+                // vc111 通知线：灵动岛胶囊同步提示（悬浮窗在=显示且可直操；不在=只有这条通知）
+                IslandManager.todoCaptured(ctx, who, p.text, autoAdded, p.id, if (autoAdded) p.id else null)
                 nm.notify(TodoActionReceiver.TAG, p.id.hashCode(), builder.build())
             } catch (_: Throwable) {
                 // 发通知失败不影响入库

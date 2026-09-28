@@ -57,6 +57,8 @@ object ReminderNotifications {
         }
         val n = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_stat_luyuan)
+            // vc111：vivo 通知卡不解析自适应图标（兜底成机器人）——自带运行时绘制的大叶盘
+            .setLargeIcon(NotiStyle.brandLargeIcon(context))
             .setColor(0xFF224A3A.toInt())
             .setContentTitle(title)
             .setContentText(text)
@@ -67,6 +69,8 @@ object ReminderNotifications {
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setAutoCancel(true)
             .build()
+        // vc111 通知线：灵动岛胶囊同步提示（笔记件点胶囊直达该笔记详情）
+        IslandManager.reminder(context, title, text, if (tapDetail) noteId else null)
         try {
             androidx.core.app.NotificationManagerCompat.from(context)
                 .notify(noteId.hashCode(), n)
@@ -291,6 +295,8 @@ object JournalReminder {
         )
         val n = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_luyuan)
+            // vc111：vivo 通知卡不解析自适应图标（兜底成机器人）——自带运行时绘制的大叶盘
+            .setLargeIcon(NotiStyle.brandLargeIcon(context))
             .setColor(0xFF224A3A.toInt())
             .setContentTitle("该记日记啦")
             .setContentText("今天想记录点什么？点这里打开路远")
@@ -298,6 +304,8 @@ object JournalReminder {
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
             .build()
+        // vc111 通知线：灵动岛胶囊同步提示
+        IslandManager.reminder(context, "该记日记啦", "今天想记录点什么？", null)
         try {
             androidx.core.app.NotificationManagerCompat.from(context).notify(2002, n)
         } catch (_: SecurityException) {

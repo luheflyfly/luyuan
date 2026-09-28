@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- vc111 通知动作键·已完成（白线条，与 ic_stat_luyuan 同族；换掉 android.R 老图标的孤垂感。
+     AOSP 安卓 13+ 动作键只显示文字不受影响；OriginOS 显示图标+文字时不再出现老系统图标） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="22dp"
+    android:viewportWidth="22"
+    android:viewportHeight="22">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M4.5,11.5l4.5,4.5L17.5,6.5" />
+</vector>

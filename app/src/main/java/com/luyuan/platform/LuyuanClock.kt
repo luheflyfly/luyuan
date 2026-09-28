@@ -182,6 +182,8 @@ class ClockReceiver : BroadcastReceiver() {
                 )
                 val n = NotificationCompat.Builder(context, LuyuanClock.CHANNEL_BRIEF)
                     .setSmallIcon(R.drawable.ic_stat_luyuan)
+                    // vc111：vivo 通知卡不解析自适应图标（兜底成机器人）——自带运行时绘制的大叶盘
+                    .setLargeIcon(NotiStyle.brandLargeIcon(context))
                     .setColor(0xFF224A3A.toInt())
                     .setContentTitle("今日简报")
                     .setContentText(text.replace("\n", " ").take(60))
@@ -189,6 +191,8 @@ class ClockReceiver : BroadcastReceiver() {
                     .setContentIntent(ppi)
                     .setAutoCancel(true)
                     .build()
+                // vc111 通知线：灵动岛胶囊同步提示（点胶囊开简报）
+                IslandManager.brief(context, text)
                 try {
                     androidx.core.app.NotificationManagerCompat.from(context).notify(9201, n)
                 } catch (_: SecurityException) {

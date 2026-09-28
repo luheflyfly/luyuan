@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.luyuan.BuildConfig
 import com.luyuan.data.AskRemote
+import com.luyuan.data.IslandSettings
 import com.luyuan.data.MessageSettings
 import com.luyuan.data.NoteRepository
 import com.luyuan.platform.PermissionHelper
@@ -346,6 +347,9 @@ fun SettingsScreen(vm: LuyuanViewModel, onBack: () -> Unit, onAsk: () -> Unit = 
             // ---------- 📬 消息待办（立项单 2026-09-13 T4/T5） ----------
             MessageTodoCard()
 
+            // ---------- 🏝 灵动岛悬浮胶囊（vc111 路河派单：挖孔旁轻提示） ----------
+            IslandCard()
+
             // ---------- 📱 vivo 保活指引（v1.12）：提醒/通知失灵的自查路径 ----------
             KeepAliveCard()
 
@@ -359,6 +363,47 @@ fun SettingsScreen(vm: LuyuanViewModel, onBack: () -> Unit, onAsk: () -> Unit = 
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+    }
+}
+
+/**
+ * vc111 灵动岛悬浮胶囊开关：录音计时/待办收录/提醒三类事件在屏幕顶部黑胶囊里轻提示。
+ * 悬浮窗权限没授的机器加窗自动静默（等于没开），不影响任何功能。
+ */
+@Composable
+private fun IslandCard() {
+    val context = LocalContext.current
+    var on by remember { mutableStateOf(IslandSettings.enabled(context)) }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(16.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text("灵动岛悬浮提示", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(
+            "录音计时、收到待办、到点提醒会在屏幕顶部（摄像头旁边）的黑色小胶囊里提示，点胶囊可展开操作。\n" +
+                "如果不显示：系统设置 → 应用 → 路远 → 显示悬浮窗，打开即可（vivo 手机一般已开）。",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "开胶囊提示",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f)
+            )
+            Switch(
+                checked = on,
+                onCheckedChange = {
+                    on = it
+                    IslandSettings.setEnabled(context, it)
+                }
+            )
         }
     }
 }
