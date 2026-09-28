@@ -220,6 +220,9 @@ object IslandManager {
             Mode.BRIEF -> if (expanded) briefExpanded(c, box) else textCompact(c, box, briefBody)
             null -> Unit
         }
+        // 悬浮窗换内容后强制重排：WRAP_CONTENT 窗口在部分系统上不会按新内容自动重测，
+        // 会塌成最小宽一条（2026-09-28 平板真机实锤），updateViewLayout 强制走一遍测量
+        try { wm?.updateViewLayout(box, box.layoutParams) } catch (_: Throwable) { }
     }
 
     private fun hideNow() {
