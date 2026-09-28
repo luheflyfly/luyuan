@@ -112,6 +112,15 @@ object IslandManager {
         }
     }
 
+    /** vc112：设置里拨 off 立即收起已显示的胶囊（热刷新反馈，路河 2026-09-28 体验反馈） */
+    fun offNow() {
+        main.post {
+            try {
+                if (!IslandSettings.enabled(appCtx!!)) hideNow()
+            } catch (_: Throwable) { }
+        }
+    }
+
     /** 待办收录。autoAdded=true=已入库（todoId 非空，胶囊键直操正式库）；false=待确认存量（三键老路径） */
     fun todoCaptured(ctx: Context, who: String, text: String, autoAdded: Boolean, pendingId: String?, todoId: String?) {
         prep(ctx)

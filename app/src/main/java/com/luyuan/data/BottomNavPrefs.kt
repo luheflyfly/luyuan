@@ -20,8 +20,13 @@ object BottomNavPrefs {
     fun showCourse(ctx: Context) = prefs(ctx).getBoolean(KEY_COURSE, true)
     fun showPeople(ctx: Context) = prefs(ctx).getBoolean(KEY_PEOPLE, false)
 
-    fun set(ctx: Context, key: String, v: Boolean) =
+    fun set(ctx: Context, key: String, v: Boolean): Unit {
         prefs(ctx).edit().putBoolean(key, v).apply()
+        version.intValue++   // vc112：拨开关即热刷新底栏（MainActivity 订阅此版本号）
+    }
+
+    /** 可观察版本号：设置里拨开关时 +1，底栏 remember 以此为 key 立即重读（2026-09-28 实测拨动不刷新） */
+    val version = androidx.compose.runtime.mutableIntStateOf(0)
 
     /** 固定页槽位（index 与历史深链一致：0笔记 3日记 5待办；vc79 待办升底栏一级页），返回可见槽位 */
     fun visibleSlots(ctx: Context): List<Int> {

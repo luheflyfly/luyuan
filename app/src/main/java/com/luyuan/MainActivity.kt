@@ -164,8 +164,9 @@ fun AppRoot(startDest: String) {
     // 底栏显示顺序 = 翻页顺序；被移除的页不进翻页队列。此前 pager=历史槽位序 0-5、底栏=显示序，
     // 所以从笔记右滑落在视觉第四个「记账」，且隐藏页还能被滑到弹出占位提示。
     val context0 = androidx.compose.ui.platform.LocalContext.current
-    // currentRoute 变化（设置返回）也重读底栏偏好——顺手修「设置里关了页、回底栏不变」的隐患
-    val visibleSlots = androidx.compose.runtime.remember(currentRoute) {
+    // currentRoute 变化（设置返回）重读底栏偏好；vc112 起拨开关本身也触发（BottomNavPrefs.version 可观察版本号）
+    val navVersion = com.luyuan.data.BottomNavPrefs.version.intValue
+    val visibleSlots = androidx.compose.runtime.remember(currentRoute, navVersion) {
         com.luyuan.data.BottomNavPrefs.visibleSlots(context0)
     }
     val tabs = listOf(

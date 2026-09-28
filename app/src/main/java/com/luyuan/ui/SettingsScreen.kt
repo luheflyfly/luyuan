@@ -402,6 +402,8 @@ private fun IslandCard() {
                 onCheckedChange = {
                     on = it
                     IslandSettings.setEnabled(context, it)
+                    // vc112：拨 off 立即收起已显示的胶囊（热刷新反馈）
+                    if (!it) com.luyuan.platform.IslandManager.offNow()
                 }
             )
         }

@@ -328,19 +328,24 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
                         modifier = Modifier
                             .background(LuyuanColors.Green50, RoundedCornerShape(999.dp))
                             .clickable {
-                                PendingMessageTodoStore.add(
-                                    context,
-                                    PendingMessageTodo(
-                                        id = PendingMessageTodoStore.newId(),
-                                        text = "明天下午三点前把班会记录发给辅导员",
-                                        who = "辅导员",
-                                        whenText = "明天下午三点",
-                                        raw = "（示例）记得把周一班会记录整理好发我，明天下午三点前。",
-                                        source = "wechat",
-                                        sender = "示例",
-                                        created_at = PendingMessageTodoStore.nowIso()
+                                // vc112：待确认已退役（vc108），示例直接进正式库——
+                                // 原走 PendingMessageTodoStore.add 会被老示例条目的 text+sender
+                                // 查重拦死（平板实测按钮无效果，2026-09-28）
+                                try {
+                                    TodoStore.createFromPending(
+                                        context,
+                                        PendingMessageTodo(
+                                            id = PendingMessageTodoStore.newId(),
+                                            text = "明天下午三点前把班会记录发给辅导员",
+                                            who = "辅导员",
+                                            whenText = "明天下午三点",
+                                            raw = "（示例）记得把周一班会记录整理好发我，明天下午三点前。",
+                                            source = "wechat",
+                                            sender = "示例",
+                                            created_at = PendingMessageTodoStore.nowIso()
+                                        )
                                     )
-                                )
+                                } catch (_: Throwable) { }
                                 reload()
                             }
                             .padding(horizontal = 12.dp, vertical = 6.dp)

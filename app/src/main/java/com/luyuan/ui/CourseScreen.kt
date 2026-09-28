@@ -260,7 +260,6 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
     val periods = remember(keiwuEvents, periodOverrides) {
         buildPeriods(keiwuEvents?.class_periods ?: emptyList(), periodOverrides)
     }
-    var editPeriodBig by remember { mutableStateOf<Int?>(null) }
 
     // vc100 今天的课：一眼看到今天每节课在什么教室（含已上完的置灰、正在上的高亮）
     val todayCourses = remember(courses, curWeek) {
@@ -546,7 +545,6 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                                             .width(GRID_TIME_W.dp)
                                             .height(GRID_CELL_H.dp)
                                             .background(MaterialTheme.colorScheme.surface)
-                                            .clickable { editPeriodBig = big }
                                     ) {
                                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                             Text(
@@ -661,7 +659,7 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                 }
                 item(key = "grid_hint") {
                     Text(
-                        "点时间列的大节号可改这对课的时间；单堂课占半格。",
+                        "单堂课占半格；空格子点「＋」可加课。",
                         fontSize = 9.5.sp, color = LuyuanColors.Ink4,
                         modifier = Modifier.padding(start = 2.dp)
                     )
