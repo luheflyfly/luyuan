@@ -163,6 +163,9 @@ object IslandManager {
         mode = m; expanded = false
         unpost(hider); unpost(ticker)
         hider = null; ticker = null
+        // 本机实测（MagicOS/OriginOS 2026-09-28）：悬浮窗原地换内容必塌宽（连计时器刷文字
+        // 都可能触发），唯一稳定路径=新挂窗的第一次布局。所以一切形态切换都整窗拆掉重挂。
+        removeWindowNow()
         if (!ensureWindow()) return
         rebuild()
         pop()
@@ -171,6 +174,21 @@ object IslandManager {
             hider = run
             main.postDelayed(run, autoHideMs)
         }
+    }
+
+    /** 点击展开/收起：整窗拆掉重挂（原地 rebuild 在本机会塌宽，见 show 注释） */
+    private fun toggle() {
+        expanded = !expanded
+        removeWindowNow()
+        if (!ensureWindow()) return
+        rebuild()
+        pop()
+    }
+
+    private fun removeWindowNow() {
+        val box = root ?: return
+        root = null; added = false; pillText = null
+        try { wm?.removeView(box) } catch (_: Throwable) { }
     }
 
     /** 加窗。悬浮窗权限没授/系统拒绝=返回 false，胶囊整体静默。 */
@@ -220,22 +238,6 @@ object IslandManager {
             Mode.BRIEF -> if (expanded) briefExpanded(c, box) else textCompact(c, box, briefBody)
             null -> Unit
         }
-        // 悬浮窗换内容后强制重排：实测部分系统（MagicOS/OriginOS）对 WRAP_CONTENT 悬浮窗
-        // 换内容后不按新内容重测，会塌成一条窄柱（2026-09-28 平板真机实锤两次）。
-        // 釜底抽薪：手动量出内容真实尺寸，把窗口宽高写成显式像素，不再依赖系统 wrap 重测。
-        // 规格必须 AT_MOST 屏幕尺寸——UNSPECIFIED 下带 ellipsize 的 TextView 会量成零宽
-        // （平板实锤：量出 71x262=只剩 padding，整窗塌成细柱）。
-        try {
-            val dm = c.resources.displayMetrics
-            box.measure(
-                android.view.View.MeasureSpec.makeMeasureSpec(dm.widthPixels, android.view.View.MeasureSpec.AT_MOST),
-                android.view.View.MeasureSpec.makeMeasureSpec(dm.heightPixels, android.view.View.MeasureSpec.AT_MOST)
-            )
-            val lp2 = box.layoutParams as WindowManager.LayoutParams
-            lp2.width = box.measuredWidth
-            lp2.height = box.measuredHeight
-            wm?.updateViewLayout(box, lp2)
-        } catch (_: Throwable) { }
     }
 
     private fun hideNow() {
@@ -270,7 +272,7 @@ object IslandManager {
         pillText = tv
         row.addView(tv)
         row.setOnClickListener { v ->
-            try { expanded = true; rebuild(); pop() } catch (_: Throwable) { }
+            try { toggle() } catch (_: Throwable) { }
         }
         box.addView(row)
         startTicker()
@@ -291,7 +293,7 @@ object IslandManager {
         btns.addView(button(c, "打开路远", BTN_GREEN) { v -> openApp(null) })
         card.addView(btns)
         card.setOnClickListener { v ->
-            try { expanded = false; rebuild(); pop() } catch (_: Throwable) { }
+            try { toggle() } catch (_: Throwable) { }
         }
         box.addView(card)
     }
@@ -308,7 +310,7 @@ object IslandManager {
         pillText = tv
         row.addView(tv)
         row.setOnClickListener { v ->
-            try { expanded = true; rebuild(); pop() } catch (_: Throwable) { }
+            try { toggle() } catch (_: Throwable) { }
         }
         box.addView(row)
     }
@@ -334,7 +336,7 @@ object IslandManager {
         }
         card.addView(btns)
         card.setOnClickListener { v ->
-            try { expanded = false; rebuild(); pop() } catch (_: Throwable) { }
+            try { toggle() } catch (_: Throwable) { }
         }
         box.addView(card)
     }
@@ -354,7 +356,7 @@ object IslandManager {
         btns.addView(button(c, "打开", BTN_GREEN) { v -> openApp(remDetailId) })
         card.addView(btns)
         card.setOnClickListener { v ->
-            try { expanded = false; rebuild(); pop() } catch (_: Throwable) { }
+            try { toggle() } catch (_: Throwable) { }
         }
         box.addView(card)
     }
@@ -374,7 +376,7 @@ object IslandManager {
         btns.addView(button(c, "打开路远", BTN_GREEN) { v -> openApp(null) })
         card.addView(btns)
         card.setOnClickListener { v ->
-            try { expanded = false; rebuild(); pop() } catch (_: Throwable) { }
+            try { toggle() } catch (_: Throwable) { }
         }
         box.addView(card)
     }
