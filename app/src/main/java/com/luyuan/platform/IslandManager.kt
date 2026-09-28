@@ -223,10 +223,13 @@ object IslandManager {
         // 悬浮窗换内容后强制重排：实测部分系统（MagicOS/OriginOS）对 WRAP_CONTENT 悬浮窗
         // 换内容后不按新内容重测，会塌成一条窄柱（2026-09-28 平板真机实锤两次）。
         // 釜底抽薪：手动量出内容真实尺寸，把窗口宽高写成显式像素，不再依赖系统 wrap 重测。
+        // 规格必须 AT_MOST 屏幕尺寸——UNSPECIFIED 下带 ellipsize 的 TextView 会量成零宽
+        // （平板实锤：量出 71x262=只剩 padding，整窗塌成细柱）。
         try {
+            val dm = c.resources.displayMetrics
             box.measure(
-                android.view.View.MeasureSpec.makeMeasureSpec(0, android.view.View.MeasureSpec.UNSPECIFIED),
-                android.view.View.MeasureSpec.makeMeasureSpec(0, android.view.View.MeasureSpec.UNSPECIFIED)
+                android.view.View.MeasureSpec.makeMeasureSpec(dm.widthPixels, android.view.View.MeasureSpec.AT_MOST),
+                android.view.View.MeasureSpec.makeMeasureSpec(dm.heightPixels, android.view.View.MeasureSpec.AT_MOST)
             )
             val lp2 = box.layoutParams as WindowManager.LayoutParams
             lp2.width = box.measuredWidth
