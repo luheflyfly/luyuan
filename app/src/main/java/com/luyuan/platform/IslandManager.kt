@@ -6,7 +6,6 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
@@ -210,13 +209,10 @@ object IslandManager {
             PixelFormat.TRANSLUCENT
         )
         lp.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-        lp.y = dip(6f)
-        // 贴挖孔：允许窗体伸进刘海/状态栏带（API 28+ 字段；低版本设备本就加不上窗，静默）
-        if (Build.VERSION.SDK_INT >= 28) {
-            lp.layoutInDisplayCutoutMode =
-                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
-        }
-        lp.flags = lp.flags or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+        // 定位在状态栏下方，不进摄像头挖孔保护区——真机实锤（2026-09-28 平板横屏）：
+        // 窗口压住挖孔区会被系统钳成挖孔旁的保护形状（恒定 71x262 细柱，内容怎么改都一样），
+        // 且系统钳制时机不定（先正常后突变）。让开挖孔 = 稳定显示。
+        lp.y = statusBarPx(c) + dip(2f)
         return try {
             w.addView(box, lp)
             root = box; added = true
@@ -225,6 +221,14 @@ object IslandManager {
             root = null; added = false
             false
         }
+    }
+
+    /** 系统状态栏高度（读系统 dimen；取不到就给个保守值） */
+    private fun statusBarPx(c: Context): Int = try {
+        val id = c.resources.getIdentifier("status_bar_height", "dimen", "android")
+        if (id > 0) c.resources.getDimensionPixelSize(id) else dip(28f)
+    } catch (_: Throwable) {
+        dip(28f)
     }
 
     private fun rebuild() {
