@@ -220,9 +220,19 @@ object IslandManager {
             Mode.BRIEF -> if (expanded) briefExpanded(c, box) else textCompact(c, box, briefBody)
             null -> Unit
         }
-        // 悬浮窗换内容后强制重排：WRAP_CONTENT 窗口在部分系统上不会按新内容自动重测，
-        // 会塌成最小宽一条（2026-09-28 平板真机实锤），updateViewLayout 强制走一遍测量
-        try { wm?.updateViewLayout(box, box.layoutParams) } catch (_: Throwable) { }
+        // 悬浮窗换内容后强制重排：实测部分系统（MagicOS/OriginOS）对 WRAP_CONTENT 悬浮窗
+        // 换内容后不按新内容重测，会塌成一条窄柱（2026-09-28 平板真机实锤两次）。
+        // 釜底抽薪：手动量出内容真实尺寸，把窗口宽高写成显式像素，不再依赖系统 wrap 重测。
+        try {
+            box.measure(
+                android.view.View.MeasureSpec.makeMeasureSpec(0, android.view.View.MeasureSpec.UNSPECIFIED),
+                android.view.View.MeasureSpec.makeMeasureSpec(0, android.view.View.MeasureSpec.UNSPECIFIED)
+            )
+            val lp2 = box.layoutParams as WindowManager.LayoutParams
+            lp2.width = box.measuredWidth
+            lp2.height = box.measuredHeight
+            wm?.updateViewLayout(box, lp2)
+        } catch (_: Throwable) { }
     }
 
     private fun hideNow() {
