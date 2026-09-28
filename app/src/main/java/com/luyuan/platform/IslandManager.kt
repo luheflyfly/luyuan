@@ -290,23 +290,21 @@ object IslandManager {
     }
 
     private fun recExpanded(c: Context, box: LinearLayout) {
-        val card = vcol(c)
-        card.background = cardBg()
-        card.setPadding(dip(14f), dip(12f), dip(14f), dip(12f))
-        val head = hrow(c); head.gravity = Gravity.CENTER_VERTICAL
-        head.addView(dot(c)); head.addView(gap(8))
-        head.addView(label(c, if (recordPaused) "录音已暂停" else "路远正在录音", bold = true))
-        card.addView(head)
-        card.addView(gapV(6))
-        card.addView(sub(c, "停止录音在 App 里；点空白处收起胶囊"))
-        card.addView(gapV(10))
-        val btns = hrow(c)
-        btns.addView(button(c, "打开路远", BTN_GREEN) { v -> openApp(null) })
-        card.addView(btns)
-        card.setOnClickListener { v ->
+        // 展开态也用单横排（真灵动岛同款宽胶囊）：本机实测竖排多控件树在悬浮窗里量不对，
+        // 横排单行结构（与收起态同族）始终正确
+        val row = hrow(c)
+        row.background = cardBg()
+        row.setPadding(dip(14f), dip(8f), dip(14f), dip(8f))
+        row.gravity = Gravity.CENTER_VERTICAL
+        row.addView(dot(c))
+        row.addView(gap(8))
+        row.addView(label(c, if (recordPaused) "录音已暂停" else "路远正在录音", bold = true))
+        row.addView(gap(12))
+        row.addView(button(c, "打开路远", BTN_GREEN) { v -> openApp(null) })
+        row.setOnClickListener { v ->
             try { toggle() } catch (_: Throwable) { }
         }
-        box.addView(card)
+        box.addView(row)
     }
 
     private fun textCompact(c: Context, box: LinearLayout, body: String) {
@@ -327,69 +325,63 @@ object IslandManager {
     }
 
     private fun todoExpanded(c: Context, box: LinearLayout) {
-        val card = vcol(c)
-        card.background = cardBg()
-        card.setPadding(dip(14f), dip(12f), dip(14f), dip(12f))
-        val head = hrow(c); head.gravity = Gravity.CENTER_VERTICAL
-        head.addView(leaf(c, dip(20f))); head.addView(gap(8))
-        head.addView(label(c, "待办已收录 · $todoWho", bold = true))
-        card.addView(head)
-        card.addView(gapV(6))
-        card.addView(sub(c, todoBody))
-        card.addView(gapV(10))
-        val btns = hrow(c)
-        btns.addView(button(c, "已完成", BTN_GREEN) { v -> act(TodoActionReceiver.ACTION_DONE) })
-        btns.addView(gap(8))
-        btns.addView(button(c, "不要", BTN_GRAY) { v -> act(TodoActionReceiver.ACTION_DROP) })
+        val row = hrow(c)
+        row.background = cardBg()
+        row.setPadding(dip(10f), dip(8f), dip(14f), dip(8f))
+        row.gravity = Gravity.CENTER_VERTICAL
+        row.addView(leaf(c, dip(22f)))
+        row.addView(gap(8))
+        val t = label(c, "待办已收录 · $todoWho：${todoBody.replace("\n", " ")}", bold = false)
+        t.maxWidth = dip(240f)
+        row.addView(t)
+        row.addView(gap(12))
+        row.addView(button(c, "已完成", BTN_GREEN) { v -> act(TodoActionReceiver.ACTION_DONE) })
+        row.addView(gap(8))
+        row.addView(button(c, "不要", BTN_GRAY) { v -> act(TodoActionReceiver.ACTION_DROP) })
         if (!todoAutoAdded) {
-            btns.addView(gap(8))
-            btns.addView(button(c, "收下", BTN_GRAY) { v -> act(TodoActionReceiver.ACTION_KEEP) })
+            row.addView(gap(8))
+            row.addView(button(c, "收下", BTN_GRAY) { v -> act(TodoActionReceiver.ACTION_KEEP) })
         }
-        card.addView(btns)
-        card.setOnClickListener { v ->
+        row.setOnClickListener { v ->
             try { toggle() } catch (_: Throwable) { }
         }
-        box.addView(card)
+        box.addView(row)
     }
 
     private fun remExpanded(c: Context, box: LinearLayout) {
-        val card = vcol(c)
-        card.background = cardBg()
-        card.setPadding(dip(14f), dip(12f), dip(14f), dip(12f))
-        val head = hrow(c); head.gravity = Gravity.CENTER_VERTICAL
-        head.addView(leaf(c, dip(20f))); head.addView(gap(8))
-        head.addView(label(c, remTitle, bold = true))
-        card.addView(head)
-        card.addView(gapV(6))
-        card.addView(sub(c, remBody))
-        card.addView(gapV(10))
-        val btns = hrow(c)
-        btns.addView(button(c, "打开", BTN_GREEN) { v -> openApp(remDetailId) })
-        card.addView(btns)
-        card.setOnClickListener { v ->
+        val row = hrow(c)
+        row.background = cardBg()
+        row.setPadding(dip(10f), dip(8f), dip(14f), dip(8f))
+        row.gravity = Gravity.CENTER_VERTICAL
+        row.addView(leaf(c, dip(22f)))
+        row.addView(gap(8))
+        val t = label(c, "$remTitle：${remBody.replace("\n", " ")}", bold = false)
+        t.maxWidth = dip(250f)
+        row.addView(t)
+        row.addView(gap(12))
+        row.addView(button(c, "打开", BTN_GREEN) { v -> openApp(remDetailId) })
+        row.setOnClickListener { v ->
             try { toggle() } catch (_: Throwable) { }
         }
-        box.addView(card)
+        box.addView(row)
     }
 
     private fun briefExpanded(c: Context, box: LinearLayout) {
-        val card = vcol(c)
-        card.background = cardBg()
-        card.setPadding(dip(14f), dip(12f), dip(14f), dip(12f))
-        val head = hrow(c); head.gravity = Gravity.CENTER_VERTICAL
-        head.addView(leaf(c, dip(20f))); head.addView(gap(8))
-        head.addView(label(c, "今日简报", bold = true))
-        card.addView(head)
-        card.addView(gapV(6))
-        card.addView(sub(c, briefBody))
-        card.addView(gapV(10))
-        val btns = hrow(c)
-        btns.addView(button(c, "打开路远", BTN_GREEN) { v -> openApp(null) })
-        card.addView(btns)
-        card.setOnClickListener { v ->
+        val row = hrow(c)
+        row.background = cardBg()
+        row.setPadding(dip(10f), dip(8f), dip(14f), dip(8f))
+        row.gravity = Gravity.CENTER_VERTICAL
+        row.addView(leaf(c, dip(22f)))
+        row.addView(gap(8))
+        val t = label(c, "今日简报：${briefBody.replace("\n", " ")}", bold = false)
+        t.maxWidth = dip(280f)
+        row.addView(t)
+        row.addView(gap(12))
+        row.addView(button(c, "打开路远", BTN_GREEN) { v -> openApp(null) })
+        row.setOnClickListener { v ->
             try { toggle() } catch (_: Throwable) { }
         }
-        box.addView(card)
+        box.addView(row)
     }
 
     // ---------- 小件 ----------
