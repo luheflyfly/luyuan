@@ -3,6 +3,7 @@ package com.luyuan.ui
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,28 +23,33 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.luyuan.platform.PermissionHelper
-import kotlinx.coroutines.delay
 
 private const val MODE_RECORD = 1
 private const val MODE_OFFLINE = 3
+
+/** 波形最大条数（与 LuyuanViewModel.WAV_BARS_MAX 对齐） */
+private const val WAV_BARS = 64
 
 /** 语音记事页：录音待转写（回电脑 SenseVoice）/ 离线识别（本机引擎） 两模式。
  *  即时识别（系统接口被 vivo 封死）与键盘兜底已按用户要求移除；
@@ -55,7 +61,10 @@ fun RecordScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
     val voiceError by vm.voiceError.collectAsStateWithLifecycle()
     val savedMsg by vm.savedMsg.collectAsStateWithLifecycle()
     val diaryMode by vm.diaryMode.collectAsStateWithLifecycle()
-    val wavStartedAt by vm.wavStartedAt.collectAsStateWithLifecycle()
+    // vc110 P5：已录时长（暂停冻结）/暂停状态/波形条统一来自 ViewModel
+    val elapsedMs by vm.wavElapsedMs.collectAsStateWithLifecycle()
+    val paused by vm.wavPaused.collectAsStateWithLifecycle()
+    val bars by vm.wavBars.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     val audioLauncher = rememberLauncherForActivityResult(
@@ -127,33 +136,36 @@ fun RecordScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
                     Spacer(Modifier.height(4.dp))
                     Icon(Icons.Default.Mic, contentDescription = null,
                         modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.primary)
-                    // 录音计时
-                    var tick by remember { mutableLongStateOf(0L) }
-                    LaunchedEffect(wavStartedAt) {
-                        if (wavStartedAt > 0L) {
-                            while (vm.isRecording.value) {
-                                tick = System.currentTimeMillis()
-                                delay(500)
-                            }
-                        }
-                    }
                     if (recording) {
-                        val secs = ((tick - wavStartedAt) / 1000).coerceAtLeast(0)
+                        Waveform(bars, paused)
+                        val secs = elapsedMs / 1000
                         Text(
-                            "● 录音中  %02d:%02d".format(secs / 60, secs % 60),
+                            if (paused) "⏸ 已暂停  %02d:%02d".format(secs / 60, secs % 60)
+                            else "● 录音中  %02d:%02d".format(secs / 60, secs % 60),
                             fontSize = 22.sp,
-                            color = LuyuanColors.Red
+                            color = if (paused) MaterialTheme.colorScheme.onSurfaceVariant else LuyuanColors.Red
                         )
                         Text(
                             "停止后原声自动同步回电脑，转写完成文字就回来了",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Button(
-                            onClick = { vm.stopWavRecording() },
-                            modifier = Modifier.size(120.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = LuyuanColors.Red)
-                        ) { Text("停止") }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Button(
+                                onClick = { vm.stopWavRecording() },
+                                modifier = Modifier.size(width = 120.dp, height = 56.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = LuyuanColors.Red)
+                            ) { Text("停止") }
+                            OutlinedButton(
+                                onClick = {
+                                    if (paused) vm.resumeWavRecording() else vm.pauseWavRecording()
+                                },
+                                modifier = Modifier.size(width = 88.dp, height = 56.dp)
+                            ) { Text(if (paused) "继续" else "暂停") }
+                        }
                     } else {
                         Text(
                             if (savedMsg.startsWith("已录音")) savedMsg else "录下原声，回家自动转写",
@@ -187,26 +199,30 @@ fun RecordScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
                             )
                         }
                         recording -> {
-                            var tick by remember { mutableLongStateOf(0L) }
-                            LaunchedEffect(wavStartedAt) {
-                                if (wavStartedAt > 0L) {
-                                    while (vm.isRecording.value) {
-                                        tick = System.currentTimeMillis()
-                                        delay(500)
-                                    }
-                                }
-                            }
-                            val secs = ((tick - wavStartedAt) / 1000).coerceAtLeast(0)
+                            Waveform(bars, paused)
+                            val secs = elapsedMs / 1000
                             Text(
-                                "● 录音中  %02d:%02d".format(secs / 60, secs % 60),
+                                if (paused) "⏸ 已暂停  %02d:%02d".format(secs / 60, secs % 60)
+                                else "● 录音中  %02d:%02d".format(secs / 60, secs % 60),
                                 fontSize = 22.sp,
-                                color = LuyuanColors.Red
+                                color = if (paused) MaterialTheme.colorScheme.onSurfaceVariant else LuyuanColors.Red
                             )
-                            Button(
-                                onClick = { vm.stopOfflineRecording() },
-                                modifier = Modifier.size(120.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = LuyuanColors.Red)
-                            ) { Text("停止") }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Button(
+                                    onClick = { vm.stopOfflineRecording() },
+                                    modifier = Modifier.size(width = 120.dp, height = 56.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = LuyuanColors.Red)
+                                ) { Text("停止") }
+                                OutlinedButton(
+                                    onClick = {
+                                        if (paused) vm.resumeWavRecording() else vm.pauseWavRecording()
+                                    },
+                                    modifier = Modifier.size(width = 88.dp, height = 56.dp)
+                                ) { Text(if (paused) "继续" else "暂停") }
+                            }
                         }
                         else -> {
                             Text(
@@ -248,4 +264,26 @@ private fun ModeChip(label: String, selected: Boolean, onClick: () -> Unit) {
             else MaterialTheme.colorScheme.onSurfaceVariant
         )
     ) { Text(label) }
+}
+
+/** vc110 P5：实时波形——右端最新，暂停时不再来新条自然冻结；振幅×2.5 提小声可见度 */
+@Composable
+private fun Waveform(bars: List<Float>, paused: Boolean) {
+    val color = if (paused) MaterialTheme.colorScheme.onSurfaceVariant
+    else MaterialTheme.colorScheme.primary
+    Canvas(modifier = Modifier.fillMaxWidth().height(56.dp)) {
+        val slot = size.width / WAV_BARS
+        val barW = slot * 0.62f
+        val shown = if (bars.size > WAV_BARS) bars.takeLast(WAV_BARS) else bars
+        shown.forEachIndexed { i, v ->
+            val h = (v * 2.5f).coerceIn(0.05f, 1f) * size.height
+            val left = size.width - (shown.size - i) * slot + (slot - barW) / 2f
+            drawRoundRect(
+                color = color,
+                topLeft = Offset(left, (size.height - h) / 2f),
+                size = Size(barW, h),
+                cornerRadius = CornerRadius(barW / 2f, barW / 2f)
+            )
+        }
+    }
 }

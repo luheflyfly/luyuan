@@ -21,6 +21,8 @@ import com.luyuan.platform.ReminderScheduler
 import com.luyuan.platform.TodayWidgetProvider
 import com.luyuan.platform.StorageLocator
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -626,6 +628,7 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
         wavRecorder?.stop()
         wavRecorder = null
         wavId = null
+        stopWavTicker()
         _wavStartedAt.value = 0L
         try {
             ctx.stopService(Intent(ctx, com.luyuan.platform.LuyuanService::class.java))
@@ -709,6 +712,19 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
     private val _wavStartedAt = MutableStateFlow(0L)
     val wavStartedAt: StateFlow<Long> = _wavStartedAt
 
+    // vc110 P5：暂停状态 / 已录时长（暂停冻结）/ 波形振幅条（0..1，右端最新），录音页只读
+    private val _wavPaused = MutableStateFlow(false)
+    val wavPaused: StateFlow<Boolean> = _wavPaused
+    private val _wavElapsedMs = MutableStateFlow(0L)
+    val wavElapsedMs: StateFlow<Long> = _wavElapsedMs
+    private val _wavBars = MutableStateFlow(emptyList<Float>())
+    val wavBars: StateFlow<List<Float>> = _wavBars
+    private var wavPausedAt = 0L
+    private var wavPausedTotalMs = 0L
+    private var wavTicker: Job? = null
+    private var wavBarMax = 0f
+    private var wavBarStartMs = 0L
+
     fun startWavRecording(diary: Boolean = false) {
         if (_isRecording.value) return
         currentDiary = diary
@@ -719,17 +735,31 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
         val id = UUID.randomUUID().toString()
         wavId = id
         _wavStartedAt.value = System.currentTimeMillis()
+        wavPausedAt = 0L
+        wavPausedTotalMs = 0L
+        _wavPaused.value = false
+        _wavElapsedMs.value = 0L
+        _wavBars.value = emptyList()
         wavRecorder = com.luyuan.data.AudioRecorder(
             java.io.File(StorageLocator.audioDir(ctx), "$id.wav")
-        ) { }
+        ) { chunk -> onWavPcm(chunk) }
         try {
             wavRecorder?.start()
             _isRecording.value = true
-            val intent = Intent(ctx, com.luyuan.platform.LuyuanService::class.java).apply {
-                putExtra(com.luyuan.platform.LuyuanService.EXTRA_TEXT, "录音中…")
+            // vc110 P5：已录时长统一在这里算（暂停冻结），替代录音页各自起线程的老写法
+            wavTicker = viewModelScope.launch {
+                while (_isRecording.value) {
+                    val now = System.currentTimeMillis()
+                    val pausedSpan = if (_wavPaused.value) now - wavPausedAt else 0L
+                    _wavElapsedMs.value =
+                        (now - _wavStartedAt.value - wavPausedTotalMs - pausedSpan).coerceAtLeast(0L)
+                    delay(250)
+                }
             }
-            ctx.startForegroundService(intent)
+            postRecordingNotification(paused = false)
         } catch (_: Exception) {
+            wavTicker?.cancel()
+            wavTicker = null
             wavRecorder = null
             wavId = null
             _wavStartedAt.value = 0L
@@ -738,10 +768,79 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** vc110 P5：暂停/继续——盘上原声不动，计时冻结，通知栏同步静置 */
+    fun pauseWavRecording() {
+        if (!_isRecording.value || _wavPaused.value) return
+        wavRecorder?.pause()
+        wavPausedAt = System.currentTimeMillis()
+        _wavPaused.value = true
+        postRecordingNotification(paused = true)
+    }
+
+    fun resumeWavRecording() {
+        if (!_isRecording.value || !_wavPaused.value) return
+        wavPausedTotalMs += System.currentTimeMillis() - wavPausedAt
+        wavPausedAt = 0L
+        _wavPaused.value = false
+        wavRecorder?.resume()
+        postRecordingNotification(paused = false)
+    }
+
+    private fun postRecordingNotification(paused: Boolean) {
+        try {
+            val intent = Intent(ctx, com.luyuan.platform.LuyuanService::class.java).apply {
+                putExtra(
+                    com.luyuan.platform.LuyuanService.EXTRA_TEXT,
+                    if (paused) "已暂停，点继续接着录" else "录音中…"
+                )
+                putExtra(com.luyuan.platform.LuyuanService.EXTRA_PAUSED, paused)
+            }
+            ctx.startForegroundService(intent)
+        } catch (_: Exception) {
+        }
+    }
+
+    /** 录音线程回调：聚合 75ms 一条振幅（Fossify 同款节奏），喂录音页实时波形 */
+    private fun onWavPcm(chunk: ByteArray) {
+        val now = System.currentTimeMillis()
+        var m = 0f
+        var i = 0
+        while (i + 1 < chunk.size) {
+            val v = (((chunk[i + 1].toInt() and 0xFF) shl 8) or (chunk[i].toInt() and 0xFF))
+                .toShort().toInt() / 32768f
+            val a = if (v < 0f) -v else v
+            if (a > m) m = a
+            i += 2
+        }
+        if (m > wavBarMax) wavBarMax = m
+        if (wavBarStartMs == 0L) wavBarStartMs = now
+        if (now - wavBarStartMs >= WAV_BAR_MS) {
+            val next = _wavBars.value + wavBarMax
+            _wavBars.value = if (next.size > WAV_BARS_MAX) next.takeLast(WAV_BARS_MAX) else next
+            wavBarMax = 0f
+            wavBarStartMs = now
+        }
+    }
+
+    private companion object {
+        /** 波形条聚合窗口（75ms，Fossify 同款）与保留条数 */
+        const val WAV_BAR_MS = 75L
+        const val WAV_BARS_MAX = 64
+    }
+
+    private fun stopWavTicker() {
+        wavTicker?.cancel()
+        wavTicker = null
+        _wavPaused.value = false
+        wavPausedAt = 0L
+        wavPausedTotalMs = 0L
+    }
+
     fun stopWavRecording() {
         val rec = wavRecorder
         wavRecorder?.stop()
         wavRecorder = null
+        stopWavTicker()
         try {
             ctx.stopService(Intent(ctx, com.luyuan.platform.LuyuanService::class.java))
         } catch (_: Exception) {
@@ -801,6 +900,7 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
         val rec = wavRecorder
         wavRecorder?.stop()
         wavRecorder = null
+        stopWavTicker()
         try {
             ctx.stopService(Intent(ctx, com.luyuan.platform.LuyuanService::class.java))
         } catch (_: Exception) {

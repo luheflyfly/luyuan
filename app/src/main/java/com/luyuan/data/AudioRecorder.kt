@@ -36,6 +36,10 @@ class AudioRecorder(
     private var mark: File? = null
     private var written = 0L
 
+    /** vc110 P5：暂停中——线程照常抽干麦克风缓冲但丢弃样本（恢复不带旧尾巴），盘上不追加 */
+    @Volatile
+    private var paused = false
+
     /** finalize（头修好、流关死）后倒计数；转写方 awaitReady 等它（P6） */
     private val done = CountDownLatch(1)
 
@@ -65,7 +69,7 @@ class AudioRecorder(
             try {
                 while (running) {
                     val read = record?.read(buffer, 0, buffer.size) ?: -1
-                    if (read > 0) {
+                    if (read > 0 && !paused) {
                         val chunk = if (read == buffer.size) buffer else buffer.copyOf(read)
                         out?.let { it.write(chunk); it.flush() }
                         written += read
@@ -94,6 +98,13 @@ class AudioRecorder(
         thread?.join(2000)
         thread = null
     }
+
+    /** vc110 P5：暂停写盘（.capture 标记仍在，被杀照走 P1 抢救）；继续=接着追加 */
+    fun pause() { paused = true }
+
+    fun resume() { paused = false }
+
+    val isPaused: Boolean get() = paused
 
     /** P6：等录音线程真正 finalize（头修好、流关死）。超时也返回（尽力而为）。 */
     fun awaitReady(timeoutMs: Long = 10_000L) {

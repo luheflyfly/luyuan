@@ -73,6 +73,9 @@ object OfflineStt {
     fun transcribeWav(ctx: Context, wav: File): String {
         val samples = readPcm16(wav)
         if (samples.size < SAMPLE_RATE / 10) return "" // 不足 0.1 秒视为空
+        // vc110 P4：转写前滤掉 <80Hz 教室杂音。只滤这份内存副本，
+        // 盘上原声 WAV 一个字节不动（原声=唯一真相）
+        highPass80(samples)
         val rec = getRecognizer(ctx)
         val stream = rec.createStream()
         try {
@@ -84,6 +87,32 @@ object OfflineStt {
             return rec.getResult(stream).text.trim()
         } finally {
             stream.release()
+        }
+    }
+
+    /**
+     * vc110 P4：80Hz 二阶 Butterworth 高通（RBJ biquad，Q=1/√2，DF2T 原地滤波）。
+     * 人声基频 >85Hz，空调嗡嗡声/桌椅/手持摩擦在 80Hz 以下——滤掉后识别少被杂音带偏。
+     * Diktafon pcm_highpass.dart 机制直译（公开 DSP 标准公式，Double 内部算力防累积误差）。
+     */
+    private fun highPass80(samples: FloatArray) {
+        val w0 = 2.0 * Math.PI * 80.0 / SAMPLE_RATE
+        val cosW0 = kotlin.math.cos(w0)
+        val alpha = kotlin.math.sin(w0) / Math.sqrt(2.0)
+        val a0 = 1.0 + alpha
+        val b0 = (1.0 + cosW0) / 2.0 / a0
+        val b1 = -(1.0 + cosW0) / a0
+        val b2 = (1.0 + cosW0) / 2.0 / a0
+        val a1 = -2.0 * cosW0 / a0
+        val a2 = (1.0 - alpha) / a0
+        var z1 = 0.0
+        var z2 = 0.0
+        for (i in samples.indices) {
+            val x = samples[i].toDouble()
+            val y = b0 * x + z1
+            z1 = b1 * x - a1 * y + z2
+            z2 = b2 * x - a2 * y
+            samples[i] = y.toFloat()
         }
     }
 
