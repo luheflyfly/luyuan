@@ -121,7 +121,8 @@ object IslandManager {
             try {
                 if (!IslandSettings.enabled(appCtx!!) || recording) return@post
                 todoWho = who; todoBody = text
-                todoAutoAdded = autoAdded; todoPendingId = pendingId; todoId = todoId
+                todoAutoAdded = autoAdded; todoPendingId = pendingId
+                this@IslandManager.todoId = todoId   // 参数遮蔽单例字段，必须限定 this
                 show(Mode.TODO, 6000L)
             } catch (_: Throwable) { }
         }
@@ -491,8 +492,7 @@ object IslandManager {
         return (v * d + 0.5f).toInt()
     }
 
-    private companion object {
-        const val BTN_GREEN = "#FF2D5A48"
-        const val BTN_GRAY = "#26FFFFFF"
-    }
+    // object 内不能嵌 companion（Kotlin 语法），常量直接放对象顶层
+    private const val BTN_GREEN = "#FF2D5A48"
+    private const val BTN_GRAY = "#26FFFFFF"
 }
