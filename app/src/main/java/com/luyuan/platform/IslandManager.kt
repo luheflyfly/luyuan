@@ -278,10 +278,10 @@ object IslandManager {
     private fun recCompact(c: Context, box: LinearLayout) {
         val row = hrow(c)
         row.background = pillBg()
-        row.setPadding(dip(13f), dip(7f), dip(15f), dip(7f))
+        row.setPadding(dip(14f), dip(12f), dip(16f), dip(12f))
         row.gravity = Gravity.CENTER_VERTICAL
         row.addView(dot(c))
-        row.addView(gap(7))
+        row.addView(gap(8))
         val tv = label(c, recLabel(), bold = true)
         pillText = tv
         row.addView(tv)
@@ -295,9 +295,9 @@ object IslandManager {
     private fun textCompact(c: Context, box: LinearLayout, body: String) {
         val row = hrow(c)
         row.background = pillBg()
-        row.setPadding(dip(10f), dip(7f), dip(14f), dip(7f))
+        row.setPadding(dip(11f), dip(12f), dip(15f), dip(12f))
         row.gravity = Gravity.CENTER_VERTICAL
-        row.addView(leaf(c, dip(22f)))
+        row.addView(leaf(c, dip(26f)))
         row.addView(gap(8))
         val tv = label(c, body.replace("\n", " "), bold = false)
         tv.maxWidth = dip(250f)
@@ -392,7 +392,7 @@ object IslandManager {
     private fun label(c: Context, text: String, bold: Boolean): TextView = TextView(c).apply {
         this.text = text
         setTextColor(Color.WHITE)
-        textSize = 13f
+        textSize = 15f
         if (bold) typeface = Typeface.DEFAULT_BOLD
         maxLines = 1
         ellipsize = TextUtils.TruncateAt.END
