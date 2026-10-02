@@ -799,6 +799,7 @@ internal fun dueLabel(remindAt: String?, whenText: String, now: LocalDateTime): 
 /** 待确认页：存量待确认队列的处理出口——逐条收下/已完成/不要，右上一键清空剩余。
  *  vc108 起新任务直接进待办（待确认退役），本页只处理历史存量。 */
 @Composable
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 private fun ExpiredSection(
     trows: List<TRow>,
     onToggle: (String) -> Unit,
