@@ -558,7 +558,7 @@ private fun TimelineView(trows: List<TRow>, now: LocalDateTime, onToggle: (Strin
         if (buckets.isEmpty()) {
             item(key = "tl_empty") {
                 Text(
-                    "时间轴空空的。列表里没有未办待办时这里也没内容。",
+                    "时间轴空空的。微信/QQ 里的正经事会自动收进来，到点前 1 小时还会提醒你。",
                     fontSize = 12.sp, color = LuyuanColors.Ink4,
                     modifier = Modifier.padding(top = 24.dp)
                 )
