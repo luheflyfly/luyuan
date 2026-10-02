@@ -26,10 +26,12 @@ import java.util.Calendar
 object LuyuanClock {
     const val ACTION_WIDGET = "com.luyuan.WIDGET_KEEPALIVE"
     const val ACTION_BRIEF = "com.luyuan.MORNING_BRIEF"
+    const val ACTION_PHOTO_SCAN = "com.luyuan.PHOTO_SCAN"   // vc112：下课后 5 分钟扫课堂照片
     const val CHANNEL_BRIEF = "luyuan_brief"
 
     private const val REQ_WIDGET = 9102
     private const val REQ_BRIEF = 9103
+    private const val REQ_PHOTO = 9301
     private const val WIDGET_PERIOD_MIN = 15L
 
     fun ensureChannels(context: Context) {
@@ -62,7 +64,47 @@ object LuyuanClock {
         val briefAt = nextDaily(7, 10)
         val bpi = pi(context, Intent(context, ClockReceiver::class.java).setAction(ACTION_BRIEF), REQ_BRIEF)
         setExact(am, briefAt, bpi)
+
+        // ④ vc112 课堂照片扫描：今天每节课下课后 5 分钟一次（连堂同下课时刻只排一个；
+        //   刚下完课≤1 小时的补一个 2 分钟后的闹钟兜底——App 白天没开时靠晨间简报 07:10 排当天全场）。
+        //   每日重排依赖：晨间简报（每天必响）+ BootReceiver + App 打开（LuyuanViewModel.init）。
+        try {
+            val today = java.time.LocalDate.now()
+            val week = com.luyuan.domain.semesterWeekOf(today)
+            val nowMin = Calendar.getInstance().let {
+                it.get(Calendar.HOUR_OF_DAY) * 60 + it.get(Calendar.MINUTE)
+            }
+            val seenEnds = HashSet<String>()
+            var scheduled = 0
+            for (c in V2EntityRepository.listCourses(context)) {
+                if (c.weekday != today.dayOfWeek.value || !weeksMatch(c.weeks, week)) continue
+                val endMin = slotToMin(c.end)
+                if (endMin <= 0) continue
+                val endKey = c.end
+                if (!seenEnds.add(endKey)) continue
+                val atMin = endMin + 5
+                if (atMin <= nowMin) {
+                    if (nowMin - atMin > 60) continue        // 早就下课：补扫兜底只管 1 小时内
+                    if (scheduled >= 10) break
+                    val catchUp = pi(context, photoScanIntent(context, c), REQ_PHOTO + 100 + scheduled)
+                    setExact(am, System.currentTimeMillis() + 2 * 60_000L, catchUp)
+                    scheduled += 1
+                } else {
+                    if (scheduled >= 10) break
+                    val spi = pi(context, photoScanIntent(context, c), REQ_PHOTO + scheduled)
+                    setExact(am, System.currentTimeMillis() + (atMin - nowMin) * 60_000L, spi)
+                    scheduled += 1
+                }
+            }
+        } catch (_: Exception) { /* 照片扫描排不上不影响其他节拍 */ }
     }
+
+    /** vc112：某节课的照片扫描闹钟意图（课名/起止时刻随 extras 带给 ClockReceiver） */
+    private fun photoScanIntent(context: Context, c: com.luyuan.data.Course): Intent =
+        Intent(context, ClockReceiver::class.java).setAction(ACTION_PHOTO_SCAN)
+            .putExtra("course_name", c.name)
+            .putExtra("course_start", c.start)
+            .putExtra("course_end", c.end)
 
     /** 按设备能力选 Exact / Window（与 ReminderScheduler 同款双轨） */
     private fun setExact(am: AlarmManager, at: Long, pi: PendingIntent): Boolean {
@@ -168,6 +210,21 @@ class ClockReceiver : BroadcastReceiver() {
                         }
                     )
                 }
+            }
+            LuyuanClock.ACTION_PHOTO_SCAN -> {
+                // vc112 课堂照片扫描：OCR 要几十秒，甩后台线程跑完即通知
+                val name = intent.getStringExtra("course_name") ?: return
+                val start = intent.getStringExtra("course_start") ?: return
+                val end = intent.getStringExtra("course_end") ?: return
+                val pending = goAsync()
+                Thread {
+                    try {
+                        PhotoScanner.runScheduled(context, name, start, end)
+                    } catch (_: Exception) {
+                    } finally {
+                        pending.finish()
+                    }
+                }.start()
             }
             LuyuanClock.ACTION_BRIEF -> {
                 LuyuanClock.ensureChannels(context)

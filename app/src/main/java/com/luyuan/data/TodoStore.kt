@@ -114,6 +114,39 @@ object TodoStore {
     }
 
     /**
+     * vc112 课堂照片扫描入库（PhotoScanner 调用）：同文本未办查重 + 自动提醒，
+     * 语义与 createFromPending 一致（source="photo"，sender=课程名，who=课堂照片，raw 存 OCR 全文溯源）。
+     */
+    fun createFromPhoto(
+        context: Context,
+        text: String,
+        course: String,
+        whenText: String,
+        dueIso: String,
+        raw: String
+    ): Boolean {
+        if (text.isBlank()) return false
+        val fresh = textOf(text)
+        for (t in list(context)) {
+            if (!t.done && textOf(t.text) == fresh) return false   // 已有同文本未办：不重复建
+        }
+        val now = PendingMessageTodoStore.nowIso()
+        val base = Todo(
+            id = java.util.UUID.randomUUID().toString(),
+            text = text,
+            who = "课堂照片",
+            when_text = whenText,
+            due_at = dueIso,
+            raw = raw,
+            source = "photo",
+            sender = course,
+            created_at = now,
+            updated_at = now
+        )
+        return write(context, autoReminder(base))
+    }
+
+    /**
      * vc113：按 due_at 算自动提醒时刻 = 截止前 1 小时（截止早于当下或已过则不设）。
      * 只填 remind_at 字段；调度由 ReminderScheduler.rescheduleAll 统一接管（App 打开/开机/响后重排）。
      */

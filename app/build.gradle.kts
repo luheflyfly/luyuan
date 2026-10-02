@@ -12,8 +12,8 @@ android {
         applicationId = "com.luyuan"
         minSdk = 24
         targetSdk = 34
-        versionCode = 111
-        versionName = "1.35.0"
+        versionCode = 112
+        versionName = "1.36.0"
         // 离线识别（sherpa-onnx）jniLib 只带 arm64（用户真机为 arm64，控制 APK 体积）
         ndk {
             abiFilters += "arm64-v8a"
@@ -93,4 +93,8 @@ dependencies {
     implementation("io.coil-kt:coil-svg:2.6.0")
     // 分享网址抓正文（微信文章等）：HTML 解析
     implementation("org.jsoup:jsoup:1.17.2")
+    // vc112 课堂照片 OCR：ML Kit 中文识别，离线模型随包（约 +20MB），不联网不依赖谷歌服务（vivo 无 GMS 可用）
+    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
+    // vc112：照片 EXIF 方向读取（竖拍板书不转倒）
+    implementation("androidx.exifinterface:exifinterface:1.3.7")
 }

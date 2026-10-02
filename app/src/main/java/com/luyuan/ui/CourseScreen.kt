@@ -72,12 +72,21 @@ import java.time.format.TextStyle
 import java.util.Locale
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.runtime.rememberCoroutineScope
+import com.luyuan.data.Todo
+import com.luyuan.data.TodoStore
+import com.luyuan.platform.PhotoScanner
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 学业页（vc85 改名，原「课程」）· 木案网格版（B5，2026-09-13 按.ui-mobile/v2/course-muan.html 施工）：
@@ -337,6 +346,9 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                 keiwuGradesItems(keiwuGrades?.items ?: emptyList())
             } else if (seg == 3) {
                 keiwuCsuItems(keiwuRef, keiwuLedger?.items ?: emptyList(), csuSub) { csuSub = it }
+            } else if (seg == 4) {
+                // vc112 课堂照片→作业待办（路河派单：下课扫相机新照片自动落待办）
+                item(key = "photo_todo_seg") { PhotoTodoSeg() }
             } else {
             if (courses.isEmpty()) {
                 item {
@@ -914,7 +926,7 @@ private fun SegTabs(seg: Int, onSeg: (Int) -> Unit) {
             .horizontalScroll(rememberScrollState())
             .padding(vertical = 2.dp)
     ) {
-        val names = listOf("课表", "日程", "成绩", "速查")
+        val names = listOf("课表", "日程", "成绩", "速查", "待办")
         for ((i, n) in names.withIndex()) {
             val on = seg == i
             Text(
@@ -1210,3 +1222,153 @@ internal fun semesterStart(today: LocalDate, prefs: android.content.SharedPrefer
 /** 学期第几周（锚点所在周=第 1 周） */
 internal fun weekOf(start: LocalDate, today: LocalDate): Int =
     ((today.toEpochDay() - start.toEpochDay()) / 7).toInt() + 1
+
+// ---------------- vc112 课堂照片→作业待办（学业页第五签） ----------------
+
+/**
+ * 「待办」签：顶部扫描卡（手动补扫）+ photo 来源待办清单。
+ * 自动扫描由 LuyuanClock 每节课下课后 5 分钟触发（ClockReceiver→PhotoScanner），这里只补扫与管理。
+ * 入库走 TodoStore（source="photo"），与消息待办同一套（待办页时间轴也看得到，截止前 1 小时自动提醒）。
+ */
+@Composable
+private fun PhotoTodoSeg() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    var status by remember {
+        mutableStateOf("下课后 5 分钟自动扫相机新照片；上课拍了的也可以手动补扫")
+    }
+    fun loadTodos(): List<Todo> = try {
+        TodoStore.list(context).filter { it.source == "photo" }
+    } catch (_: Exception) {
+        emptyList()
+    }
+    var todos by remember { mutableStateOf(loadTodos()) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Card(
+            shape = RoundedCornerShape(18.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("课堂照片 → 作业待办", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        status, fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 15.sp
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    if (busy) "扫描中…" else "立即扫描",
+                    fontSize = 12.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (busy) LuyuanColors.Ink4 else Color.White,
+                    modifier = Modifier
+                        .background(
+                            if (busy) MaterialTheme.colorScheme.surfaceVariant else LuyuanColors.Green700,
+                            RoundedCornerShape(999.dp)
+                        )
+                        .clickable(enabled = !busy) {
+                            busy = true
+                            status = "正在找今天的课堂照片…"
+                            scope.launch {
+                                val r = withContext(Dispatchers.IO) {
+                                    PhotoScanner.scanToday(context) { s -> status = s }
+                                }
+                                status = r.detail
+                                todos = loadTodos()
+                                busy = false
+                            }
+                        }
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                )
+            }
+        }
+
+        if (todos.isEmpty()) {
+            EmptyState(
+                icon = EmptyIconCourse,
+                title = "还没有扫到课堂作业",
+                subtitle = "上课用系统相机拍板书/PPT，下课后路远自动认字，作业内容落到这里"
+            )
+        } else {
+            for (t in todos) {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (t.done) Icons.Default.CheckCircle
+                            else Icons.Outlined.RadioButtonUnchecked,
+                            contentDescription = if (t.done) "取消完成" else "标完成",
+                            tint = if (t.done) LuyuanColors.Ink4 else LuyuanColors.Green700,
+                            modifier = Modifier
+                                .size(26.dp)
+                                .clickable {
+                                    scope.launch {
+                                        withContext(Dispatchers.IO) {
+                                            TodoStore.setDone(context, t.id, !t.done)
+                                        }
+                                        todos = loadTodos()
+                                    }
+                                }
+                        )
+                        Column(
+                            Modifier
+                                .weight(1f)
+                                .padding(horizontal = 10.dp)
+                        ) {
+                            Text(
+                                t.text,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (t.done) LuyuanColors.Ink4 else LuyuanColors.Ink1,
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis,
+                                lineHeight = 17.sp
+                            )
+                            Spacer(Modifier.height(3.dp))
+                            val sub = listOf(
+                                t.sender.ifBlank { null },
+                                t.when_text.ifBlank { null },
+                                t.created_at.take(10)
+                            ).filterNotNull().joinToString(" · ")
+                            if (sub.isNotBlank()) {
+                                Text(sub, fontSize = 10.5.sp, color = LuyuanColors.Ink4)
+                            }
+                        }
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "删除",
+                            tint = LuyuanColors.Ink4,
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clickable {
+                                    scope.launch {
+                                        withContext(Dispatchers.IO) {
+                                            TodoStore.deleteSoft(context, t.id)
+                                        }
+                                        todos = loadTodos()
+                                    }
+                                }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
