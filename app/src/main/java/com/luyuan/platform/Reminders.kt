@@ -143,6 +143,30 @@ object ReminderScheduler {
             ReminderNotifications.fire(context, "ctodo_${t.id}", "待办 · ${c.name}", t.text.take(200), ReminderNotifications.CHANNEL_TODO)
             ContactRepository.markTodoReminded(context, c.id, t.id)
         }
+
+        // ---------- vc113 消息待办自动提醒（收录即带提醒，截止前 1 小时） ----------
+        val msgUpcoming = com.luyuan.data.TodoStore.pendingReminders(context)
+            .mapNotNull { t -> parseTodoMillis(t.remind_at)?.let { t to it } }
+            .filter { (_, at) -> at > now }
+            .sortedBy { (_, at) -> at }
+            .take(20)
+        for ((t, at) in msgUpcoming) {
+            val pi = msgTodoAlarmIntent(context, t.id)
+            if (canExact(am)) {
+                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+            } else {
+                am.setWindow(AlarmManager.RTC_WAKEUP, at, 10 * 60 * 1000L, pi)
+            }
+        }
+        // 过期补弹限 5 条（防历史积压轰炸）
+        val msgOverdue = com.luyuan.data.TodoStore.pendingReminders(context)
+            .mapNotNull { t -> parseTodoMillis(t.remind_at)?.let { t to it } }
+            .filter { (_, at) -> at <= now }
+            .sortedBy { (_, at) -> at }
+        for ((t, _) in msgOverdue.take(5)) {
+            ReminderNotifications.fire(context, "msgtodo_${t.id}", "待办提醒", t.text.take(200), ReminderNotifications.CHANNEL_TODO)
+            com.luyuan.data.TodoStore.markReminded(context, t.id)
+        }
     }
 
     fun cancel(context: Context, noteId: String) {
@@ -172,6 +196,16 @@ object ReminderScheduler {
         )
     }
 
+    /** vc113：消息待办提醒闹钟（RequestCode 独立前缀防与联系人待办撞号） */
+    private fun msgTodoAlarmIntent(context: Context, todoId: String): PendingIntent {
+        val intent = Intent(context, ReminderReceiver::class.java)
+            .putExtra("msg_todo_id", todoId)
+        return PendingIntent.getBroadcast(
+            context, ("msgtodo_" + todoId).hashCode(), intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
     /** ISO8601（带/不带时区）→ epoch 毫秒；解析失败返回 null */
     private fun parseTodoMillis(s: String?): Long? {
         if (s.isNullOrBlank()) return null
@@ -192,6 +226,19 @@ object ReminderScheduler {
 /** 闹钟到点：响通知 → 标记已触发 → 排下一条 */
 class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        // vc113 消息待办提醒（收录自动带的截止前 1 小时闹钟）
+        val msgTodoId = intent.getStringExtra("msg_todo_id")
+        if (msgTodoId != null) {
+            val t = com.luyuan.data.TodoStore.list(context).firstOrNull { it.id == msgTodoId } ?: return
+            if (t.done || t.reminded == true) return
+            ReminderNotifications.fire(
+                context, "msgtodo_$msgTodoId", "待办提醒", t.text.take(200),
+                ReminderNotifications.CHANNEL_TODO
+            )
+            com.luyuan.data.TodoStore.markReminded(context, msgTodoId)
+            ReminderScheduler.rescheduleAll(context)
+            return
+        }
         // 联系人待办提醒（v1.11）：note_id 缺省时看 contact_todo_id
         val todoId = intent.getStringExtra("contact_todo_id")
         if (todoId != null) {

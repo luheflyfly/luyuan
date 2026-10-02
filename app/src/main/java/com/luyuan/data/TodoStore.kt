@@ -26,6 +26,8 @@ data class Todo(
     val source: String = "",        // wechat | qq | manual
     val sender: String = "",        // 通知发送者
     val done: Boolean = false,      // 完成标记（与笔记 todo_done 语义一致）
+    val remind_at: String? = null,  // vc113：自动提醒时刻 ISO8601（收录时按截止前1小时自动算；到点走提醒渠道）
+    val reminded: Boolean? = null,  // vc113：已响过标记（防重复弹；语义与联系人待办同）
     val done_at: String? = null,
     val device: String = "phone",
     val schema: Int = 3,
@@ -102,10 +104,30 @@ object TodoStore {
         }
         val now = PendingMessageTodoStore.nowIso()
         val base = fromPending(p)
+        // vc113 路河拍板：收录即自动带提醒——有截止的到点前 1 小时响铃，没截止的不设（别乱响）。
+        // remind_at 与笔记提醒共用同一 ISO 契约字段；到点响铃走 ReminderScheduler（待办提醒渠道）。
+        val withReminder = autoReminder(base)
         return write(
             context,
-            if (done) base.copy(done = true, done_at = now) else base
+            if (done) withReminder.copy(done = true, done_at = now) else withReminder
         )
+    }
+
+    /**
+     * vc113：按 due_at 算自动提醒时刻 = 截止前 1 小时（截止早于当下或已过则不设）。
+     * 只填 remind_at 字段；调度由 ReminderScheduler.rescheduleAll 统一接管（App 打开/开机/响后重排）。
+     */
+    private fun autoReminder(t: Todo): Todo {
+        if (t.remind_at != null || t.due_at.isBlank()) return t
+        return try {
+            val due = java.time.OffsetDateTime.parse(t.due_at)
+            val remind = due.minusHours(1)
+            if (remind.isAfter(java.time.OffsetDateTime.now())) {
+                t.copy(remind_at = remind.format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME))
+            } else t
+        } catch (_: Throwable) {
+            t
+        }
     }
 
     private fun textOf(s: String): String = s.replace("\\s+".toRegex(), "")
@@ -146,5 +168,38 @@ object TodoStore {
             created_at = now,
             updated_at = now
         )
+    }
+
+    // ---------------- vc113 消息待办自动提醒（路河拍板「收录即带提醒」） ----------------
+
+    /** 有 remind_at 且未完成未响过的消息待办（调度器挂闹钟用） */
+    fun pendingReminders(context: Context): List<Todo> = list(context).filter {
+        !it.done && !it.deleted && !it.reminded.isNotNullTrue() && !it.remind_at.isNullOrBlank()
+    }
+
+    private fun Boolean?.isNotNullTrue(): Boolean = this == true
+
+    /** 到点响铃后写 reminded=true（fresh 读盘只改目标字段，同步纪律同 setDone） */
+    fun markReminded(context: Context, id: String) {
+        try {
+            val f = listAllFiles(context).firstOrNull { it.name.equals("$PREFIX${id.take(8)}.json", true) }
+                ?: return
+            val t = v2Json.decodeFromString(Todo.serializer(), f.readText(Charsets.UTF_8))
+            f.writeText(
+                v2Json.encodeToString(
+                    Todo.serializer(),
+                    t.copy(reminded = true, updated_at = PendingMessageTodoStore.nowIso())
+                ),
+                Charsets.UTF_8
+            )
+        } catch (_: Throwable) { }
+    }
+
+    private fun listAllFiles(context: Context): List<File> = try {
+        val dir = StorageLocator.getRoot(context)
+        (dir.listFiles() ?: emptyArray())
+            .filter { it.isFile && it.name.startsWith(PREFIX, true) && !it.name.contains(".sync-conflict") }
+    } catch (_: Exception) {
+        emptyList()
     }
 }
