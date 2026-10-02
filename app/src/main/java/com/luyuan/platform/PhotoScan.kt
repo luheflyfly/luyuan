@@ -199,7 +199,7 @@ object PhotoScanner {
         }
         if (date == null) return null
         val due = LocalDateTime.of(date, LocalTime.of(23, 59))
-            .atOffset(java.time.ZoneOffset.systemDefault())
+            .atZone(java.time.ZoneId.systemDefault())
         return Pair(due.format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME), phrase)
     }
 
