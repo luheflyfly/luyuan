@@ -51,9 +51,9 @@ class MessageNotificationListener : NotificationListenerService() {
                 else -> return
             }
             if (title.isBlank() || body.isBlank()) return
-            // vc113 路河拍板放宽（原 300）：辅导员/老师原样转发长通知是待办大头，300 字闸整条扔掉属于漏报；
-            // 上限提到 1000 挡住明显的公众号长文，同时微信端展开态 BigText 一般也就几百字，实际进来的极少触顶
-            if (body.length > 1000) return
+            // vc113 路河拍板放宽（原 300）：辅导员/老师原样转发长通知是待办大头，300 字闸整条扔掉属于漏报。
+            // 实测（10-03 平板 dumpsys）：微信通知正文硬顶=1024 字（无 bigText 展开态），闸设 1200 全收微信端给的任何内容
+            if (body.length > 1200) return
 
             // 群消息 body 一般是「昵称: 内容」/「昵称：内容」，标题是群名：
             // 默认跳过；设置里开了「含群聊（通知群）」才处理（09-14 路河：通知群的待办占大头）
