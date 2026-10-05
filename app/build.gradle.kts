@@ -10,10 +10,12 @@ android {
 
     defaultConfig {
         applicationId = "com.luyuan"
-        minSdk = 24
+        // vc115：24→26。java.time/NotificationChannel/startForegroundService 全链在用且未开 desugaring，
+        // minSdk 24 名义支持两个必崩的 API 版本（真机均为新系统故未炸）；26 = Android 8.0（2017）
+        minSdk = 26
         targetSdk = 34
-        versionCode = 114
-        versionName = "1.37.0"
+        versionCode = 115
+        versionName = "1.38.0"
         // 离线识别（sherpa-onnx）jniLib 只带 arm64（用户真机为 arm64，控制 APK 体积）
         ndk {
             abiFilters += "arm64-v8a"
@@ -87,7 +89,6 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
     implementation("androidx.navigation:navigation-compose:2.7.7")
-    implementation("com.alphacephei:vosk-android:0.3.47")
     // 日记配图加载（本地文件 + SVG 贴纸）
     implementation("io.coil-kt:coil-compose:2.6.0")
     implementation("io.coil-kt:coil-svg:2.6.0")

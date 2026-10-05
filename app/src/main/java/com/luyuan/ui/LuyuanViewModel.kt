@@ -3,9 +3,6 @@ package com.luyuan.ui
 import android.app.Application
 import android.content.Context
 import android.content.Intent
-import android.os.Bundle
-import android.speech.RecognitionListener
-import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -82,10 +79,6 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
     private val _refreshDone = MutableStateFlow(0)
     val refreshDone: StateFlow<Int> = _refreshDone
 
-    /** 主页输入框聚焦请求（代际计数）：桌面小部件「记一笔」直达用 */
-    private val _focusDraft = MutableStateFlow(0)
-    val focusDraft: StateFlow<Int> = _focusDraft
-
     /** 全局搜索词（悬浮胶囊搜索态写入，笔记列表实时过滤；退出搜索态清空） */
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery
@@ -100,10 +93,6 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setMultiSelect(on: Boolean) {
         _multiSelect.value = on
-    }
-
-    fun requestDraftFocus() {
-        _focusDraft.value += 1
     }
 
     private val _trash = MutableStateFlow<List<Note>>(emptyList())
@@ -123,9 +112,6 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
     val journalTime: StateFlow<Pair<Int, Int>> = _journalTime
 
     // ---------- 语音（系统识别为主，键盘兜底） ----------
-
-    private val _liveText = MutableStateFlow("")
-    val liveText: StateFlow<String> = _liveText
 
     private val _isRecording = MutableStateFlow(false)
     val isRecording: StateFlow<Boolean> = _isRecording
@@ -403,7 +389,7 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
             var born = java.time.LocalDate.of(now.year, md.first, md.second)
             if (!born.isAfter(now)) born = born.plusYears(1)
             val remind = born.minusDays(3).atTime(9, 0)
-                .atOffset(java.time.ZoneOffset.of("+08:00")).toString()
+                .atZone(java.time.ZoneId.systemDefault()).toString()
             val exists = c.todos.any { !it.done && it.text.contains("生日") }
             if (!exists) {
                 ContactRepository.addTodoWithRemind(ctx, contactId, "生日提醒：${c.birthday}", remind)
@@ -541,87 +527,6 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- 语音识别：系统引擎（vivo 内置讯飞系），失败自动退键盘 ----------
 
-    fun startRecording(diary: Boolean = false) {
-        if (_isRecording.value) return
-        currentDiary = diary
-        _diaryMode.value = diary
-        _liveText.value = ""
-        _voiceError.value = null
-        _savedMsg.value = ""
-
-        val sr = try {
-            SpeechRecognizer.createSpeechRecognizer(ctx)
-        } catch (_: Exception) {
-            null
-        }
-        if (sr == null) {
-            _voiceError.value = "unavailable"
-            return
-        }
-        speech = sr
-        sr.setRecognitionListener(object : RecognitionListener {
-            override fun onResults(results: Bundle?) {
-                val text = results
-                    ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    ?.firstOrNull()?.trim() ?: ""
-                releaseRecognizer(sr)
-                _isRecording.value = false
-                viewModelScope.launch(Dispatchers.IO) { handleFinalText(text, currentDiary) }
-            }
-
-            override fun onPartialResults(partialResults: Bundle?) {
-                partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    ?.firstOrNull()?.let {
-                    if (it.isNotBlank()) _liveText.value = it
-                }
-            }
-
-            override fun onError(error: Int) {
-                releaseRecognizer(sr)
-                _isRecording.value = false
-                _voiceError.value = when (error) {
-                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "没听到说话（错误码 $error）"
-                    SpeechRecognizer.ERROR_NO_MATCH -> "没听清，再试一次（错误码 $error）"
-                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "需要麦克风权限（错误码 $error）"
-                    else -> {
-                        // 本机没有可用的系统语音服务：记住，以后直接进键盘模式
-                        moodPrefs.edit().putString("voice_mode", "dictation").apply()
-                        "unavailable($error)"
-                    }
-                }
-            }
-
-            override fun onReadyForSpeech(params: Bundle?) {}
-            override fun onBeginningOfSpeech() {}
-            override fun onRmsChanged(rmsdB: Float) {}
-            override fun onBufferReceived(buffer: ByteArray?) {}
-            override fun onEndOfSpeech() {}
-            override fun onEvent(eventType: Int, params: Bundle?) {}
-        })
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-        }
-        try {
-            sr.startListening(intent)
-            _isRecording.value = true
-        } catch (_: Exception) {
-            releaseRecognizer(sr)
-            _isRecording.value = false
-            moodPrefs.edit().putString("voice_mode", "dictation").apply()
-            _voiceError.value = "unavailable(start)"
-        }
-    }
-
-    /** 点停止：让识别器把最后一段说完返回 */
-    fun stopRecording() {
-        try {
-            speech?.stopListening()
-        } catch (_: Exception) {
-        }
-    }
-
     /** 取消本次识别/录音（切模式时用） */
     fun cancelRecording() {
         speech?.let { releaseRecognizer(it) }
@@ -635,7 +540,6 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
         } catch (_: Exception) {
         }
         _isRecording.value = false
-        _liveText.value = ""
     }
 
     private fun releaseRecognizer(sr: SpeechRecognizer) {
@@ -729,7 +633,6 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
         if (_isRecording.value) return
         currentDiary = diary
         _diaryMode.value = diary
-        _liveText.value = ""
         _voiceError.value = null
         _savedMsg.value = ""
         val id = UUID.randomUUID().toString()
@@ -962,57 +865,5 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
             _offlineBusy.value = false
             refreshNotes()
         }
-    }
-
-    /** 识别完成 → 落库（普通笔记 / 并入今天日记） */
-    private suspend fun handleFinalText(text: String, diary: Boolean) {
-        if (text.isBlank()) {
-            _voiceError.value = "没听到说话"
-            return
-        }
-        if (diary) {
-            val existing = NoteRepository.todayDiaryNote(ctx)
-            if (existing != null) {
-                NoteRepository.updateNote(
-                    ctx, existing.id,
-                    text = (existing.text + "\n" + text).trim(),
-                    tags = existing.tags
-                )
-            } else {
-                val now = NoteRepository.nowIso()
-                NoteRepository.saveNote(
-                    ctx,
-                    Note(
-                        id = UUID.randomUUID().toString(),
-                        created_at = now,
-                        updated_at = now,
-                        text = text,
-                        source = "voice",
-                        tags = listOf("日记"),
-                        device = "phone",
-                        transcribed = true,
-                        schema = 1
-                    )
-                )
-            }
-        } else {
-            val now = NoteRepository.nowIso()
-            NoteRepository.saveNote(
-                ctx,
-                Note(
-                    id = UUID.randomUUID().toString(),
-                    created_at = now,
-                    updated_at = now,
-                    text = text,
-                    source = "voice",
-                    tags = emptyList(),
-                    device = "phone",
-                    transcribed = true,
-                    schema = 1
-                )
-            )
-        }
-        _savedMsg.value = text
-        refreshNotes()
     }
 }

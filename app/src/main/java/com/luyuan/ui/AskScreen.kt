@@ -71,6 +71,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** 网络层异常人话化（HTTP 错误 AskRemote 已转中文，这里兜 UnknownHost/超时等英文原文） */
+private fun humanNetError(e: Exception): String = when (e) {
+    is java.net.UnknownHostException -> "网络不通（看看 Wi-Fi / 流量）"
+    is java.net.SocketTimeoutException -> "请求超时，稍后再试"
+    is javax.net.ssl.SSLException -> "网络连接不稳，稍后再试"
+    else -> e.message ?: "请求失败"
+}
+
+
 /**
  * 问路远（类 Chatbox 对话页）：
  * - 顶部模型选择器：官方模型目录（快答/深思/视觉/Pro），思考开关与视觉能力一目了然
@@ -136,7 +145,7 @@ fun AskScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
                     AskRemote.ask(cfg, model, q, imgs, history, AskRemote.buildContext(context, includePrivate))
                 }
             } catch (e: Exception) {
-                error = e.message ?: "请求失败"
+                error = humanNetError(e)
                 ""
             }
             busy = false
@@ -469,7 +478,7 @@ fun AskScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
                         savedTurns.add(idx)
                         Toast.makeText(context, "已存进笔记（$tag）", Toast.LENGTH_SHORT).show()
                     } catch (e: Exception) {
-                        Toast.makeText(context, "没存上：" + (e.message ?: ""), Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "没存上：" + humanNetError(e), Toast.LENGTH_SHORT).show()
                     }
                     pendingSave = null
                 }

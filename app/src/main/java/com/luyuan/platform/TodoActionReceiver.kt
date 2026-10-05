@@ -36,10 +36,6 @@ class TodoActionReceiver : BroadcastReceiver() {
                 } catch (_: Throwable) { }
                 PendingMessageTodoStore.remove(context, id)
             }
-            ACTION_KEEP -> {
-                try { TodoStore.createFromPending(context, pending) } catch (_: Throwable) { }
-                PendingMessageTodoStore.remove(context, id)
-            }
             ACTION_DROP -> PendingMessageTodoStore.remove(context, id)
         }
         // 撤掉这条通知
@@ -52,7 +48,6 @@ class TodoActionReceiver : BroadcastReceiver() {
     companion object {
         const val ACTION_DONE = "com.luyuan.action.TODO_DONE"
         const val ACTION_DROP = "com.luyuan.action.TODO_DROP"
-        const val ACTION_KEEP = "com.luyuan.action.TODO_KEEP"
         const val EXTRA_ID = "todo_id"
         const val EXTRA_TODO_ID = "todo_id_confirmed"   // vc107：正式库待办 id（自动收录通知用）
         const val TAG = "msg_todo"

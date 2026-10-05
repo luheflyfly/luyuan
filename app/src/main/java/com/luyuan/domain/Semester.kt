@@ -28,7 +28,8 @@ fun semesterWeekOf(today: LocalDate): Int {
 /**
  * 周次规格 "1-16" / "1,3,5" / "2-8,10-16"；空=每周都有。
  * vc113 从 LuyuanClock 私有版升为公共口径（照片扫描手动补扫同用——10-05 国庆周 bug：手动扫漏看周次，
- * 把假期里恰好落在课程时钟窗口的照片当课堂照扫了）。改动须与 LuyuanClock 私有版保持同语义。
+ * 把假期里恰好落在课程时钟窗口的照片当课堂照扫了）。vc115 起全 App 唯一实现
+ * （LuyuanClock/TodayWidgetProvider 私有副本已删，改动只改这里）。
  */
 fun weeksMatch(spec: String, week: Int): Boolean {
     val w = spec.trim()

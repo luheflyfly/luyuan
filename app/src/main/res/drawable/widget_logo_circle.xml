@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- 今日卡·标题行 logo 圆底：浅绿圆（对应视觉稿 .w-today .hd .logo .leaf，20px 圆 / green-100 #e3ece6） -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="oval">
-    <solid android:color="#E3ECE6" />
-</shape>

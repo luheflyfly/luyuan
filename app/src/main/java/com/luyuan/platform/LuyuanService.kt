@@ -39,7 +39,7 @@ class LuyuanService : Service() {
             .setSmallIcon(com.luyuan.R.drawable.ic_stat_luyuan)
             // vc111：vivo 通知卡不解析自适应图标（真机实锤兜底成系统机器人）——自带运行时绘制的大叶盘
             .setLargeIcon(NotiStyle.brandLargeIcon(this))
-            .setColor(0xFF224A3A.toInt())
+            .setColor(NotiStyle.BRAND_GREEN)
             .setOngoing(true)
         // vc109 P2：通知栏自带跳动计时，不用轮询更新通知（Diktafon 同款）；
         // vc110 P5：暂停时不再计时（计时数字停住=和录音页一致，不骗人）

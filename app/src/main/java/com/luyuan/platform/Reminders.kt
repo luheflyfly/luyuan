@@ -59,7 +59,7 @@ object ReminderNotifications {
             .setSmallIcon(R.drawable.ic_stat_luyuan)
             // vc111：vivo 通知卡不解析自适应图标（兜底成机器人）——自带运行时绘制的大叶盘
             .setLargeIcon(NotiStyle.brandLargeIcon(context))
-            .setColor(0xFF224A3A.toInt())
+            .setColor(NotiStyle.BRAND_GREEN)
             .setContentTitle(title)
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
@@ -344,7 +344,7 @@ object JournalReminder {
             .setSmallIcon(R.drawable.ic_stat_luyuan)
             // vc111：vivo 通知卡不解析自适应图标（兜底成机器人）——自带运行时绘制的大叶盘
             .setLargeIcon(NotiStyle.brandLargeIcon(context))
-            .setColor(0xFF224A3A.toInt())
+            .setColor(NotiStyle.BRAND_GREEN)
             .setContentTitle("该记日记啦")
             .setContentText("今天想记录点什么？点这里打开路远")
             .setContentIntent(pi)

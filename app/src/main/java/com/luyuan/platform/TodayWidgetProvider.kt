@@ -14,6 +14,7 @@ import com.luyuan.R
 import com.luyuan.data.ContactRepository
 import com.luyuan.data.Course
 import com.luyuan.data.V2EntityRepository
+import com.luyuan.domain.weeksMatch
 import java.util.Calendar
 import java.util.Locale
 
@@ -334,25 +335,6 @@ class TodayWidgetProvider : AppWidgetProvider() {
             valid.filter { it.weekday == wd }.minByOrNull { toMin(it.start) }?.let { return it }
         }
         return null
-    }
-
-    /** weeks "1-16" / "1,3,5" / "2-8,10-16" 混写；空=每周都有（与学业页 courseInWeek 同口径） */
-    private fun weeksMatch(spec: String, week: Int): Boolean {
-        val w = spec.trim()
-        if (w.isEmpty()) return true
-        for (part in w.split(',', '，', ';', '；')) {
-            val p = part.trim()
-            if (p.isEmpty()) continue
-            val seg = p.split('-', '～', '~')
-            if (seg.size == 2) {
-                val a = seg[0].trim().toIntOrNull()
-                val b = seg[1].trim().toIntOrNull()
-                if (a != null && b != null && week in a..b) return true
-            } else {
-                if (p.toIntOrNull() == week) return true
-            }
-        }
-        return false
     }
 
     private fun toMin(s: String): Int {

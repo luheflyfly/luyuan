@@ -1,5 +1,4 @@
 <resources>
     <string name="app_name">路远</string>
     <string name="volume_service_desc">路远·组合键录音（同时按音量加+音量减；实验性功能，不读取屏幕内容）</string>
-    <string name="widget_today_desc">下一节课 / 待办 / 支出一眼看全，底部记·说双键</string>
 </resources>

@@ -10,7 +10,4 @@ object SyncPolicy {
     const val SCHEMA_VERSION = 1
     const val DEVICE_PHONE = "phone"
     const val DEVICE_PC = "pc"
-
-    const val NOTES_DIR = "notes"
-    const val AUDIO_DIR = "audio"
 }

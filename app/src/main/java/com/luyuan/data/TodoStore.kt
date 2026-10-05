@@ -44,11 +44,12 @@ object TodoStore {
     fun fileFor(context: Context, id: String): File =
         File(StorageLocator.getRoot(context), "$PREFIX${id.take(8)}.json")
 
-    /** 写入（确认待办时调用）。返回是否成功。 */
+    /** 写入（确认待办时调用）。返回是否成功。vc115：tmp+rename 原子写——同步中途崩/断电不再留半截 JSON */
     fun write(context: Context, todo: Todo): Boolean = try {
-        fileFor(context, todo.id)
-            .writeText(v2Json.encodeToString(Todo.serializer(), todo), Charsets.UTF_8)
-        true
+        val f = fileFor(context, todo.id)
+        val tmp = File(f.parentFile, f.name + ".tmp")
+        tmp.writeText(v2Json.encodeToString(Todo.serializer(), todo), Charsets.UTF_8)
+        tmp.renameTo(f) || (f.delete() && tmp.renameTo(f))
     } catch (_: Exception) {
         false
     }
@@ -220,13 +221,7 @@ object TodoStore {
             val f = listAllFiles(context).firstOrNull { it.name.equals("$PREFIX${id.take(8)}.json", true) }
                 ?: return
             val t = v2Json.decodeFromString(Todo.serializer(), f.readText(Charsets.UTF_8))
-            f.writeText(
-                v2Json.encodeToString(
-                    Todo.serializer(),
-                    t.copy(reminded = true, updated_at = PendingMessageTodoStore.nowIso())
-                ),
-                Charsets.UTF_8
-            )
+            write(context, t.copy(reminded = true, updated_at = PendingMessageTodoStore.nowIso()))
         } catch (_: Throwable) { }
     }
 

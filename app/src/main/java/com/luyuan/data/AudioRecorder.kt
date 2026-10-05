@@ -104,7 +104,6 @@ class AudioRecorder(
 
     fun resume() { paused = false }
 
-    val isPaused: Boolean get() = paused
 
     /** P6：等录音线程真正 finalize（头修好、流关死）。超时也返回（尽力而为）。 */
     fun awaitReady(timeoutMs: Long = 10_000L) {

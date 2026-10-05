@@ -237,7 +237,13 @@ object NoteRepository {
         // 经 Syncthing 同步到电脑端也变成重复文件
         val file = findFileById(root, note.id, 0, 6)
             ?: File(root, FileNaming.fileNameFor(note.id, parseCreatedAt(note.created_at)))
-        file.writeText(note.toJson(), Charsets.UTF_8)
+        // vc115：tmp+rename 原子写——笔记正文（含日记）落同步根中途崩/断电不再留半截 JSON
+        val tmp = File(file.parentFile, file.name + ".tmp")
+        tmp.writeText(note.toJson(), Charsets.UTF_8)
+        if (!tmp.renameTo(file)) {
+            file.delete()
+            tmp.renameTo(file)
+        }
     }
 
     /** 按 id 前 8 位找已有文件（文件名约定 ..._<id前8位>.json），递归兼容旧层级 */

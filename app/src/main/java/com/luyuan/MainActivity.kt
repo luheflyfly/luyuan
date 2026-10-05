@@ -17,7 +17,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -28,7 +27,6 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.pager.rememberPagerState
@@ -342,19 +340,19 @@ fun AppRoot(startDest: String) {
         }
     }
 
-    // 待确认待办红点（vc79：挂底栏「待办」钮）：进页/切页即数 + 每 15s 兜底轮询（通知栏动作改动无广播）
+    // 待办红点（vc79 挂底栏「待办」钮；vc115 改数未办待办——原数待确认存量，vc108 退役后无 UI 出口，数字永不归零）
     var pendingTodoCount by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
     androidx.compose.runtime.LaunchedEffect(pagerState.currentPage) {
         // vc89：统计挪 IO 线程——此前在主线程扫盘，每次切页卡一下（路河「切页按钮闪烁」）
         pendingTodoCount = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            runCatching { com.luyuan.data.PendingMessageTodoStore.list(ctx).size }.getOrDefault(0)
+            runCatching { com.luyuan.data.TodoStore.list(ctx).count { !it.done } }.getOrDefault(0)
         }
     }
     androidx.compose.runtime.LaunchedEffect(Unit) {
         while (true) {
             kotlinx.coroutines.delay(15_000)
             pendingTodoCount = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                runCatching { com.luyuan.data.PendingMessageTodoStore.list(ctx).size }.getOrDefault(0)
+                runCatching { com.luyuan.data.TodoStore.list(ctx).count { !it.done } }.getOrDefault(0)
             }
         }
     }
@@ -386,7 +384,7 @@ fun AppRoot(startDest: String) {
                             },
                             icon = {
                                 if (slot == 5) {
-                                    // 待办红点：待确认消息待办条数（vc79 从笔记页顶栏迁来）
+                                    // 待办红点：未办待办条数（vc115 起=待办页「未办 N 件」同口径）
                                     androidx.compose.material3.BadgedBox(badge = {
                                         if (pendingTodoCount > 0) {
                                             androidx.compose.material3.Badge { Text("$pendingTodoCount") }
@@ -489,14 +487,6 @@ fun AppRoot(startDest: String) {
                     val id = back.arguments?.getString("id") ?: ""
                     DetailEditScreen(vm = vm, noteId = id, onBack = { nav.popBackStack() })
                 }
-                composable("settings") {
-                    SettingsScreen(
-                        vm = vm,
-                        onBack = { nav.popBackStack() },
-                        onAsk = { nav.navigate("ask") },
-                        onAskKey = { nav.navigate("askkey") }
-                    )
-                }
                 composable("askkey") {
                     AskKeyScreen(
                         vm = vm,
@@ -512,9 +502,6 @@ fun AppRoot(startDest: String) {
                 }
                 composable("review") {
                     com.luyuan.ui.ReviewScreen(vm = vm, onBack = { nav.popBackStack() })
-                }
-                composable("todos") {
-                    com.luyuan.ui.TodoScreen(vm = vm, onBack = { nav.popBackStack() })
                 }
             }
             // 点击空白处收起展开态 + 收键盘（路河 09-10 反馈：别只靠输入法收起）
@@ -707,53 +694,3 @@ fun AppRoot(startDest: String) {
         }
     }
 }
-
-/**
- * 左缘手势带（left-ia）：右滑离手→onRight（呼出抽屉），左滑离手→onLeft（可选，代 Pager 翻页）。
- * 必须挂在压住内容上方的窄条上：它是 hit-target，宽了会吞掉 Pager 手势（09-13 夜 36dp 黑洞教训）。
- * 判定：首段位移明确横向才接管（Initial pass 抢在 Pager 前），纵向立刻放行；系统返回手势用
- * systemGestureExclusion 申请豁免（Android 10+ 左缘右滑默认归系统）。
- */
-private fun Modifier.edgeGestureStrip(onRight: () -> Unit, onLeft: () -> Unit = {}): Modifier =
-    this
-        .systemGestureExclusion()
-        .pointerInput(Unit) {
-            awaitEachGesture {
-                val down = awaitFirstDown(
-                    requireUnconsumed = false,
-                    pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial
-                )
-                var totalDx = 0f
-                var totalDy = 0f
-                var decided = false
-                var isRight = false
-                while (true) {
-                    val ev = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
-                    val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
-                    if (!ch.pressed) {
-                        if (isRight && totalDx > 40f) onRight()
-                        else if (!isRight && totalDx < -60f) onLeft()
-                        break
-                    }
-                    // vc93：**纯读坐标差**——别用 positionChange() 读增量，它默认副作用是把这个位移
-                    // 标记为「已消费」，Initial pass 观察者每帧读增量会把下层滚动/点按整条手势搞死
-                    // （路河真机：笔记页无法滚动/胶囊点不动/左缘带内勾选失效的根因）。只读不毒。
-                    val pc = ch.position - ch.previousPosition
-                    totalDx += pc.x
-                    totalDy += pc.y
-                    if (!decided) {
-                        val adx = kotlin.math.abs(totalDx)
-                        val ady = kotlin.math.abs(totalDy)
-                        if (adx > 12f || ady > 12f) {
-                            decided = true
-                            isRight = adx > ady && totalDx > 0f
-                        }
-                    }
-                    if (decided && isRight) {
-                        ch.consume()
-                    } else if (decided) {
-                        break
-                    }
-                }
-            }
-        }

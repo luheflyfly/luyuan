@@ -65,7 +65,7 @@ object MessageBuffer {
     fun anyChatFull(ctx: Context): Boolean =
         list(ctx).groupingBy { it.chat }.eachCount().any { it.value >= EARLY_COUNT }
 
-    /** 全取并清空（调用方按 chat 分组抽取；抽取失败的消息不回滚——微信里本就有原文） */
+    /** 全取并清空（调用方按 chat 分组抽取；抽取失败的消息会由 Listener 回填重试，不白丢上下文） */
     fun takeAll(ctx: Context): List<BufferedMessage> = try {
         val cur = list(ctx)
         file(ctx).delete()

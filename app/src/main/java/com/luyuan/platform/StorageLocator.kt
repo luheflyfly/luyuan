@@ -50,15 +50,6 @@ object StorageLocator {
             .apply()
     }
 
-    /** 旧接口保留（外部若仍有调用）：按绝对路径语义处理，避免再退回"只存名字"的坑 */
-    fun setRootName(context: Context, nameOrPath: String) {
-        if (nameOrPath.contains('/')) {
-            setRoot(context, nameOrPath)
-        } else {
-            setRoot(context, File(Environment.getExternalStorageDirectory(), nameOrPath).absolutePath)
-        }
-    }
-
     fun notesDir(context: Context): File =
         File(getRoot(context), "notes").also { runCatching { it.mkdirs() } }
 

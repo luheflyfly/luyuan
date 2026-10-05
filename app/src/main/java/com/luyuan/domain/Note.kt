@@ -29,7 +29,7 @@ data class Note(
     val deleted: Boolean = false,   // 软删标记
     // 日记配图（PC 端 2026-09-06 扩展）：相对路径 images/<id>.jpg，文件在共享目录 images/ 子文件夹
     val images: List<String> = emptyList(),
-    // 提醒（SYNC_FORMAT 2026-09-06 扩展）：缺省=不提醒；App 端只读显示徽章，不做本地响铃
+    // 提醒（SYNC_FORMAT 2026-09-06 扩展）：缺省=不提醒；App 端显示徽章，vc113 起本地也响铃（截止前 1 小时）
     val remind_at: String? = null,
     val remind_fired: Boolean? = null,
     val schema: Int = 1

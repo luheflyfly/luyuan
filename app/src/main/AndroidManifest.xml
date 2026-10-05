@@ -14,7 +14,6 @@
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <uses-permission android:name="android.permission.VIBRATE" />
     <!-- 桌面小部件「记一笔」的悬浮速记条（桌面直接打字，不开 App） -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
@@ -28,7 +27,7 @@
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:label="路远"
+        android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.Luyuan"
         tools:targetApi="34">
@@ -36,7 +35,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:label="路远"
+            android:label="@string/app_name"
             android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.Luyuan">
@@ -93,14 +92,10 @@
             </intent-filter>
         </service>
 
+        <!-- vc115：intent-filter 摘除——发送方全走 setClass 显式 intent，非 exported receiver 的 filter 无意义 -->
         <receiver
             android:name=".platform.TodoActionReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.luyuan.action.TODO_DONE" />
-                <action android:name="com.luyuan.action.TODO_DROP" />
-            </intent-filter>
-        </receiver>
+            android:exported="false" />
         <!-- 消息待办：监听微信/QQ 聊天通知 → 粗筛 → 云端抽取 → 待确认（默认关闭，开关在设置页） -->
         <service
             android:name=".platform.MessageNotificationListener"

@@ -354,7 +354,7 @@ fun SettingsScreen(vm: LuyuanViewModel, onBack: () -> Unit, onAsk: () -> Unit = 
             KeepAliveCard()
 
             // ---------- ℹ️ 关于 ----------
-            SectionCard("ℹ️ 关于") {
+            SectionCard("关于") {
                 Text(
                     "路远 安卓 App v${BuildConfig.VERSION_NAME} · 去中心化本地记事\n" +
                         "数据按 SYNC_FORMAT 与电脑端双向同步（Syncthing）。\n" +
@@ -385,7 +385,7 @@ private fun IslandCard() {
     ) {
         Text("灵动岛悬浮提示", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Text(
-            "录音计时、收到待办、到点提醒会在屏幕顶部（摄像头旁边）的黑色小胶囊里提示，点胶囊可展开操作。\n" +
+            "录音计时、收到待办、到点提醒会在屏幕顶部（摄像头旁边）的黑色小胶囊里提示，点胶囊直接打开对应页面。\n" +
                 "如果不显示：系统设置 → 应用 → 路远 → 显示悬浮窗，打开即可（vivo 手机一般已开）。",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -444,7 +444,7 @@ private fun MessageTodoCard() {
         if (open) {
             Text(
                 "开启后，除「收到/好的」这类确认词外，绝大多数消息（含群通知）会送 DeepSeek 云端判有没有事要办；" +
-                    "本机只做最简单的噪声过滤。判出来的先落「待确认」，你在待办页点「收下」才真入账。",
+                    "本机只做最简单的噪声过滤。判出来的真任务直接进待办不用确认（vc108 拍板）；通知上有「已完成/不要」两键随时反悔。",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -543,11 +543,10 @@ private fun MessageTodoCard() {
                 )
             }
 
-            // ⑤ 不计入待办（09-15 路河：朋友闲聊不进工作流，待办服务大学工作/班长事务）
-            Text("⑤不计入待办的联系人", fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
+            // ④ 不计入待办（09-15 路河：朋友闲聊不进工作流，待办服务大学工作/班长事务）
+            Text("④不计入待办的联系人", fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
             Text(
-                "名单里的人/群，消息不再自动变待办，待办页也不再显示（电脑端同步来的待办同样会滤掉）。" +
-                    "快捷法：待办页长按待确认卡可直接加入。",
+                "名单里的人/群，消息不再自动变待办，待办页也不再显示（电脑端同步来的待办同样会滤掉）。",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -579,9 +578,9 @@ private fun MessageTodoCard() {
                 }) { Text("加入") }
             }
 
-            // ④ 外发计数（透明可查）
+            // ⑤ 外发计数（透明可查）
             Text(
-                "④本月已外发：$sent 条" +
+                "⑤本月已外发：$sent 条" +
                     if (sent == 0) "（没有原文出过本机）" else "（这些消息原文发到过云端）",
                 fontSize = 12.sp,
                 color = if (sent == 0) MaterialTheme.colorScheme.onSurfaceVariant else LuyuanColors.Amber

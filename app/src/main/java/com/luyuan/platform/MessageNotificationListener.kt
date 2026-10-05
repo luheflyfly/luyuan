@@ -212,17 +212,6 @@ class MessageNotificationListener : NotificationListenerService() {
             }
         }
 
-        /** vc107 引入；vc108 待确认退役后暂无调用方，保留给「低置信兜底」未来用 */
-        private fun parseDue(iso: String): java.time.LocalDateTime? {
-            val s = iso.trim()
-            if (s.isEmpty()) return null
-            return try {
-                java.time.OffsetDateTime.parse(s).toLocalDateTime()
-            } catch (_: Throwable) {
-                try { java.time.LocalDateTime.parse(s.take(19)) } catch (_: Throwable) { null }
-            }
-        }
-
         /** App 内补抽入口（vc98）：打开待办页时调用——进程被杀后定时器丢失，靠这条兜底把满窗缓冲抽掉。 */
         fun flushDueNow(ctx: Context) {
             try {
@@ -231,9 +220,7 @@ class MessageNotificationListener : NotificationListenerService() {
             }
         }
 
-        /** 抽中任务后的通知（vc85 重绘+vc107 分流）：
-         *  autoAdded=true = 已直接入库（明天及以后截止），通知只带「已完成/不要」直操正式库；
-         *  autoAdded=false = 落待确认队列，带「已完成/收下/不要」三键走老路径 */
+        /** 抽中任务后的通知（vc85 重绘；vc108 起全量直收=已入库收据，两键直操正式库） */
         private fun notifyTodoAction(ctx: Context, p: PendingMessageTodo, autoAdded: Boolean) {
             try {
                 ReminderNotifications.ensureChannel(ctx)
@@ -262,27 +249,19 @@ class MessageNotificationListener : NotificationListenerService() {
                     .setSmallIcon(com.luyuan.R.drawable.ic_stat_luyuan)
                     // vc111：vivo 通知卡不解析自适应图标（兜底成机器人）——自带运行时绘制的大叶盘
                     .setLargeIcon(NotiStyle.brandLargeIcon(ctx))
-                    .setColor(0xFF224A3A.toInt())
+                    .setColor(NotiStyle.BRAND_GREEN)
                     .setContentTitle(if (autoAdded) "待办已收录 · $who" else "消息待办 · $who")
                     .setContentText(p.text)
                     .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText(big))
                     .setCategory(androidx.core.app.NotificationCompat.CATEGORY_REMINDER)
                     .setAutoCancel(true)
                     .setContentIntent(tap)
-                if (autoAdded) {
-                    // vc111：动作键换品牌白线条图标（原 android.R 老图与全 App 不搭）
-                    builder.addAction(com.luyuan.R.drawable.ic_act_done, "已完成",
-                        pi(TodoActionReceiver.ACTION_DONE, p.id.hashCode() * 10 + 1, p.id))
-                    builder.addAction(com.luyuan.R.drawable.ic_act_drop, "不要",
-                        pi(TodoActionReceiver.ACTION_DROP, p.id.hashCode() * 10 + 2, p.id))
-                } else {
-                    builder.addAction(com.luyuan.R.drawable.ic_act_done, "已完成",
-                        pi(TodoActionReceiver.ACTION_DONE, p.id.hashCode() * 10 + 1))
-                    builder.addAction(com.luyuan.R.drawable.ic_act_keep, "收下",
-                        pi(TodoActionReceiver.ACTION_KEEP, p.id.hashCode() * 10 + 3))
-                    builder.addAction(com.luyuan.R.drawable.ic_act_drop, "不要",
-                        pi(TodoActionReceiver.ACTION_DROP, p.id.hashCode() * 10 + 2))
-                }
+                // vc111：动作键换品牌白线条图标（原 android.R 老图与全 App 不搭）。
+                // vc108 起全量直收恒 autoAdded=true，三键老路径（收下）运行时不可达，vc115 摘除
+                builder.addAction(com.luyuan.R.drawable.ic_act_done, "已完成",
+                    pi(TodoActionReceiver.ACTION_DONE, p.id.hashCode() * 10 + 1, p.id))
+                builder.addAction(com.luyuan.R.drawable.ic_act_drop, "不要",
+                    pi(TodoActionReceiver.ACTION_DROP, p.id.hashCode() * 10 + 2, p.id))
                 // vc111 通知线：灵动岛胶囊同步提示（悬浮窗在=显示且可直操；不在=只有这条通知）
                 IslandManager.todoCaptured(ctx, who, p.text, autoAdded, p.id, if (autoAdded) p.id else null)
                 nm.notify(TodoActionReceiver.TAG, p.id.hashCode(), builder.build())

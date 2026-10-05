@@ -9,8 +9,8 @@ import java.time.OffsetDateTime
 /**
  * 「消息待办」的待确认队列（立项单 T3）。
  *
- * 分级确认是全项目命门：云端抽出来的待办**绝不直接入正式待办**，一律先落这里，
- * 用户在笔记页顶部逐条 ✓ 确认（→ 写 todo_<id8>.json 同步回电脑）/ ✗ 丢弃。
+ * vc108 起退役：不再有写入路径（抽取结果直接进 TodoStore），本队列只存历史存量，
+ * 由通知键「已完成/不要」或代码清理；vc115 起 UI 不再展示（红点已改数正式库未办）。
  *
  * 红线（与 PendingExpenseStore 同款）：存 App 私有 filesDir，**不写共享目录、不进 SYNC_FORMAT**——
  * 只有用户确认了才落正式文件。
@@ -40,21 +40,6 @@ object PendingMessageTodoStore {
         ).sortedByDescending { it.created_at }
     } catch (_: Exception) {
         emptyList()
-    }
-
-    fun add(ctx: Context, p: PendingMessageTodo) {
-        try {
-            val cur = runCatching { list(ctx) }.getOrDefault(emptyList())
-            // 同一条任务重复抽取保护（vc98 起查重键=text+sender：同窗多任务共用原文摘录，
-            // 旧 raw+sender 键会把同窗第二条任务误杀）
-            if (cur.any { it.text == p.text && it.sender == p.sender }) return
-            // 队列上限 50 条，防止长期不确认堆积把文件撑大
-            val next = (cur + p).takeLast(50)
-            file(ctx).writeText(
-                v2Json.encodeToString(ListSerializer(PendingMessageTodo.serializer()), next)
-            )
-        } catch (_: Exception) {
-        }
     }
 
     fun remove(ctx: Context, id: String) {

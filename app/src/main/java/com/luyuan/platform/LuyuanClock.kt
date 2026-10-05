@@ -13,6 +13,7 @@ import com.luyuan.MainActivity
 import com.luyuan.R
 import com.luyuan.data.TodoStore
 import com.luyuan.data.V2EntityRepository
+import com.luyuan.domain.weeksMatch
 import java.util.Calendar
 
 /**
@@ -132,25 +133,6 @@ object LuyuanClock {
         return cal.timeInMillis
     }
 
-    /** weeks "1-16" / "1,3,5" / "2-8,10-16"；空=每周都有（与学业页 courseInWeek 同口径） */
-    private fun weeksMatch(spec: String, week: Int): Boolean {
-        val w = spec.trim()
-        if (w.isEmpty()) return true
-        for (part in w.split(',', '，', ';', '；')) {
-            val p = part.trim()
-            if (p.isEmpty()) continue
-            val seg = p.split('-', '～', '~')
-            if (seg.size == 2) {
-                val a = seg[0].trim().toIntOrNull()
-                val b = seg[1].trim().toIntOrNull()
-                if (a != null && b != null && week in a..b) return true
-            } else {
-                if (p.toIntOrNull() == week) return true
-            }
-        }
-        return false
-    }
-
     /** 晨间简报正文：今日课表 + 3 天内截止作业 */
     fun briefText(context: Context): String {
         val sb = StringBuilder()
@@ -241,7 +223,7 @@ class ClockReceiver : BroadcastReceiver() {
                     .setSmallIcon(R.drawable.ic_stat_luyuan)
                     // vc111：vivo 通知卡不解析自适应图标（兜底成机器人）——自带运行时绘制的大叶盘
                     .setLargeIcon(NotiStyle.brandLargeIcon(context))
-                    .setColor(0xFF224A3A.toInt())
+                    .setColor(NotiStyle.BRAND_GREEN)
                     .setContentTitle("今日简报")
                     .setContentText(text.replace("\n", " ").take(60))
                     .setStyle(NotificationCompat.BigTextStyle().bigText(text))

@@ -338,21 +338,6 @@ object IslandManager {
         return (if (recordPaused) "已暂停 " else "录音中 ") + String.format("%02d:%02d", s / 60, s % 60)
     }
 
-    private fun act(action: String) {
-        val c = appCtx
-        val pid = todoPendingId
-        if (c != null && pid != null) {
-            try {
-                val i = Intent(action).setPackage(c.packageName)
-                    .setClass(c, TodoActionReceiver::class.java)
-                    .putExtra(TodoActionReceiver.EXTRA_ID, pid)
-                if (todoAutoAdded && todoId != null) i.putExtra(TodoActionReceiver.EXTRA_TODO_ID, todoId)
-                c.sendBroadcast(i)
-            } catch (_: Throwable) { }
-        }
-        hideNow()
-    }
-
     private fun openApp(detailId: String?, page: String? = null) {
         val c = appCtx ?: return
         try {
@@ -369,11 +354,6 @@ object IslandManager {
     private fun pillBg(): GradientDrawable = GradientDrawable().apply {
         setColor(Color.parseColor("#F20B0B0B"))
         cornerRadius = dip(999f).toFloat()
-    }
-
-    private fun cardBg(): GradientDrawable = GradientDrawable().apply {
-        setColor(Color.parseColor("#F20E0E0E"))
-        cornerRadius = dip(22f).toFloat()
     }
 
     private fun dot(c: Context): View = View(c).apply {
@@ -398,20 +378,6 @@ object IslandManager {
         ellipsize = TextUtils.TruncateAt.END
     }
 
-    private fun button(c: Context, text: String, bg: String, onClick: (View) -> Unit): TextView =
-        TextView(c).apply {
-            this.text = text
-            setTextColor(Color.WHITE)
-            textSize = 12.5f
-            typeface = Typeface.DEFAULT_BOLD
-            background = GradientDrawable().apply {
-                setColor(Color.parseColor(bg))
-                cornerRadius = dip(999f).toFloat()
-            }
-            setPadding(dip(14f), dip(6f), dip(14f), dip(6f))
-            setOnClickListener { v -> try { onClick(v) } catch (_: Throwable) { } }
-        }
-
     private fun hrow(c: Context): LinearLayout =
         LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL }
 
@@ -429,8 +395,4 @@ object IslandManager {
         val d = appCtx?.resources?.displayMetrics?.density ?: 2.2f
         return (v * d + 0.5f).toInt()
     }
-
-    // object 内不能嵌 companion（Kotlin 语法），常量直接放对象顶层
-    private const val BTN_GREEN = "#FF2D5A48"
-    private const val BTN_GRAY = "#26FFFFFF"
 }

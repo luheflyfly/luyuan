@@ -56,16 +56,6 @@ object OfflineStt {
         }
     }
 
-    /** 释放模型（内存紧张时可调；下次识别会重新加载） */
-    @Synchronized
-    fun release() {
-        try {
-            recognizer?.release()
-        } catch (_: Exception) {
-        }
-        recognizer = null
-    }
-
     /**
      * 整段 wav（16k 单声道 16bit，AudioRecorder 产物）→ 文字。
      * 没听清返回空串；模型/文件异常抛异常。

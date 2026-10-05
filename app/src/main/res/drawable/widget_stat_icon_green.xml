@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- 今日卡·统计行图标圆底：浅绿（本月支出，视觉稿 stat/ic 用 green-100） -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
-    <solid android:color="#E3ECE6" />
-    <corners android:radius="10dp" />
-</shape>
