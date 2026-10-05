@@ -362,3 +362,382 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
         )
     }
 }
+
+// ---------- vc98：时间轴小页（路河拍板「截止日期单开一个小页做类似时间轴」） ----------
+
+/** 时间轴行渲染用的轻量结构（Row 是 TodoScreen 内部类，跨 composable 传递用这份影子） */
+private data class TRow(
+    val key: String, val text: String, val who: String,
+    val score: Long, val dueLabel: String, val origin: String,
+    val isPending: Boolean
+)
+
+/** 列表/时间轴切换胶囊（设计 token：选中=Green50 底+Green700 字） */
+@Composable
+private fun SegChip(label: String, active: Boolean, onClick: () -> Unit) {
+    Text(
+        label,
+        fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+        color = if (active) LuyuanColors.Green700 else LuyuanColors.Ink4,
+        modifier = Modifier
+            .background(if (active) LuyuanColors.Green50 else Color.Transparent, RoundedCornerShape(999.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 5.dp)
+    )
+}
+
+/** 时间轴主视图：未办按截止日分桶（逾期→今天→明天→后天→M/d→无期限），桶头=轴点+日期线 */
+@Composable
+private fun TimelineView(trows: List<TRow>, now: LocalDateTime, onToggle: (String) -> Unit) {
+    val buckets = remember(trows, now) {
+        val today = now.toLocalDate()
+        val out = linkedMapOf<String, MutableList<TRow>>()
+        for (r in trows.sortedBy { it.score }) {
+            val label = if (r.score == Long.MAX_VALUE) "无期限"
+            else {
+                val d = java.time.Instant.ofEpochMilli(r.score)
+                    .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                when {
+                    d.isBefore(today) -> "逾期 ${d.monthValue}/${d.dayOfMonth}"
+                    d == today -> "今天"
+                    d == today.plusDays(1) -> "明天"
+                    d == today.plusDays(2) -> "后天"
+                    else -> "${d.monthValue}/${d.dayOfMonth}"
+                }
+            }
+            out.getOrPut(label) { mutableListOf() }.add(r)
+        }
+        out
+    }
+    LazyColumn(
+        contentPadding = PaddingValues(bottom = 96.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 14.dp)
+    ) {
+        if (buckets.isEmpty()) {
+            item(key = "tl_empty") {
+                Text(
+                    "时间轴空空的。微信/QQ 里的正经事会自动收进来，到点前 1 小时还会提醒你。",
+                    fontSize = 12.sp, color = LuyuanColors.Ink4,
+                    modifier = Modifier.padding(top = 24.dp)
+                )
+            }
+        }
+        for ((label, items) in buckets) {
+            item(key = "tl_sec_$label") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier
+                            .size(10.dp)
+                            .background(
+                                if (label.startsWith("逾期")) LuyuanColors.Red else LuyuanColors.Green700,
+                                CircleShape
+                            )
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "$label · ${items.size} 件",
+                        fontWeight = FontWeight.ExtraBold, fontSize = 13.sp, color = LuyuanColors.Ink2
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .height(1.dp)
+                            .background(LuyuanColors.Green100)
+                    )
+                }
+            }
+            for (r in items) {
+                item(key = "tl_${r.key}") {
+                    TimelineRow(r, onToggle)
+                }
+            }
+        }
+    }
+}
+
+/** 时间轴单行：左侧时刻、中间轴点、右侧内容卡（待确认=琥珀点无勾选；正式=可勾） */
+@Composable
+private fun TimelineRow(r: TRow, onToggle: (String) -> Unit) {
+    val time = if (r.score == Long.MAX_VALUE) "—"
+    else {
+        val d = java.time.Instant.ofEpochMilli(r.score)
+            .atZone(java.time.ZoneId.systemDefault()).toLocalDateTime()
+        if (r.dueLabel.contains(":")) String.format("%02d:%02d", d.hour, d.minute)
+        else "${d.monthValue}/${d.dayOfMonth}"
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            time, fontSize = 10.sp, color = LuyuanColors.Ink4,
+            modifier = Modifier.width(36.dp)
+        )
+        if (r.isPending) {
+            Box(
+                Modifier
+                    .padding(horizontal = 7.dp)
+                    .size(8.dp)
+                    .background(LuyuanColors.Amber, CircleShape)
+            )
+        } else {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .padding(horizontal = 0.dp)
+                    .size(22.dp)
+                    .border(1.6.dp, LuyuanColors.Green700, CircleShape)
+                    .clickable { onToggle(r.key) }
+            ) {
+                Icon(
+                    Icons.Default.Check, "完成",
+                    tint = LuyuanColors.Green700, modifier = Modifier.size(13.dp)
+                )
+            }
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                r.text, fontSize = 12.5.sp, color = LuyuanColors.Ink1,
+                maxLines = 2, overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                (r.who + " · " + r.origin).trim(' ', '·'),
+                fontSize = 9.5.sp, color = LuyuanColors.Ink4,
+                maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
+        }
+        if (r.isPending) {
+            Text(
+                "待确认", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = LuyuanColors.Amber
+            )
+        }
+    }
+}
+
+// ---------- 截止时间解析（确定性，不做猜测；解析不出 = 无期限排最后） ----------
+// vc107 大扩：号/下周X/周末/月底/中文钟点（下午三点半）——真机取证 15 条仅 2 条能落日期的教训
+
+private val RX_HM = Regex("(\\d{1,2}):(\\d{2})")
+private val RX_MD = Regex("(\\d{1,2})月(\\d{1,2})[日号]")
+private val RX_D = Regex("(\\d{1,2})[日号]")
+// (?<![下个])：把「下周三/下个星期三」让给 RX_NEXTWEEK，别当本周的周三吃掉
+private val RX_WEEK = Regex("(?<![下个])[周星期礼拜]([一二三四五六日天])")
+private val RX_NEXTWEEK = Regex("下(?:周|星期|礼拜)([一二三四五六日天])")
+private val RX_CN_TIME = Regex("(上午|早上|中午|下午|傍晚|晚上|夜里|凌晨)?(\\d{1,2})[点时](半|(\\d{1,2})分?)?")
+
+private val WEEK_MAP = mapOf('一' to 1, '二' to 2, '三' to 3, '四' to 4, '五' to 5, '六' to 6, '日' to 7, '天' to 7)
+
+/** 中文钟点 → LocalTime：下午三点半=15:30，中午12=12:00，凌晨2=02:00；识别不出 null */
+private fun cnTime(t: String): LocalTime? {
+    val m = RX_CN_TIME.find(t) ?: return null
+    var h = m.groupValues[2].toIntOrNull() ?: return null
+    val half = m.groupValues[3] == "半"
+    val min = m.groupValues[4].toIntOrNull().takeIf { it in 0..59 } ?: 0
+    val ampm = m.groupValues[1]
+    if (h !in 1..12 && ampm.isNotBlank()) return null
+    if (h > 23) return null
+    if ((ampm == "下午" || ampm == "傍晚" || ampm == "晚上" || ampm == "夜里") && h < 12) h += 12
+    if (ampm == "中午" && h < 12) h = 12
+    return try { LocalTime.of(h, if (half) 30 else min) } catch (_: Exception) { null }
+}
+
+private fun parseTime(t: String): LocalTime? = RX_HM.find(t)?.let { m ->
+    try { LocalTime.of(m.groupValues[1].toInt(), m.groupValues[2].toInt()) } catch (_: Exception) { null }
+} ?: cnTime(t)
+
+/** 截止时间分值（毫秒）：remind_at/due_at > when_text 显式词；无 → Long.MAX（排最后） */
+internal fun deadlineScore(whenText: String, remindAt: String?, createdAt: String, now: LocalDateTime): Long {
+    // 1) 联系人待办 remind_at / 消息待办 due_at 是 ISO 时间，最准
+    if (!remindAt.isNullOrBlank()) {
+        parseIso(remindAt)?.let { return it }
+    }
+    val t = whenText.trim()
+    if (t.isNotEmpty()) {
+        val time = parseTime(t)
+        val eod = time ?: LocalTime.of(23, 59)
+        // 2) 今天 / 明天 / 后天 / 大后天
+        val day = when {
+            t.contains("大后天") -> now.toLocalDate().plusDays(3)
+            t.contains("后天") -> now.toLocalDate().plusDays(2)
+            t.contains("明天") -> now.toLocalDate().plusDays(1)
+            t.contains("今天") || t.contains("今晚") -> now.toLocalDate()
+            else -> null
+        }
+        if (day != null) return at(day, eod)
+        // 3) 下周X → 下个周一再走 (X-1) 天（RX_NEXTWEEK 先于 RX_WEEK）
+        RX_NEXTWEEK.find(t)?.groupValues?.get(1)?.let { ch ->
+            WEEK_MAP[ch.firstOrNull()]?.let { target ->
+                val monday = now.toLocalDate().plusDays((8 - now.dayOfWeek.value).toLong())
+                return at(monday.plusDays((target - 1).toLong()), eod)
+            }
+        }
+        // 4) 周末 → 这个周末（周六；今天周末就算今天）
+        if (t.contains("周末")) {
+            var d = now.toLocalDate()
+            while (d.dayOfWeek.value != 6) d = d.plusDays(1)
+            return at(d, eod)
+        }
+        // 5) 月底 → 本月最后一天
+        if (t.contains("月底") || t.contains("月末")) {
+            return at(now.toLocalDate().withDayOfMonth(now.toLocalDate().lengthOfMonth()), eod)
+        }
+        // 6) 周X/星期X/礼拜X → 下一个该星期几（含今天；与 PC 相对星期口径同向）
+        RX_WEEK.find(t)?.groupValues?.get(1)?.let { ch ->
+            WEEK_MAP[ch.firstOrNull()]?.let { target ->
+                var d = now.toLocalDate()
+                var guard = 0
+                while (d.dayOfWeek.value != target && guard < 8) {
+                    d = d.plusDays(1)
+                    guard += 1
+                }
+                return at(d, eod)
+            }
+        }
+        // 7) M月D日/号（「前」=当天 23:59 语义，日期不变）
+        RX_MD.find(t)?.destructured?.let { d ->
+            try {
+                return at(LocalDate.of(now.year, d.component1().toInt(), d.component2().toInt()), eod)
+            } catch (_: Exception) {
+            }
+        }
+        // 8) 纯 D日/号（本月内；已过则下月同日，防"25号"在 26 号解析成过去）
+        RX_D.find(t)?.destructured?.let { d ->
+            try {
+                var dd = LocalDate.of(now.year, now.month, d.component1().toInt())
+                if (dd.isBefore(now.toLocalDate())) dd = dd.plusMonths(1)
+                return at(dd, eod)
+            } catch (_: Exception) {
+            }
+        }
+        // 9) 纯钟点（今天）
+        if (time != null) return at(now.toLocalDate(), time)
+    }
+    // 10) created_at 兜底不参与排序（避免新建的永远沉底/置顶），判无期限
+    return Long.MAX_VALUE
+}
+
+private fun at(day: LocalDate, time: LocalTime): Long =
+    LocalDateTime.of(day, time).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+
+private fun parseIso(s: String): Long? = try {
+    LocalDateTime.parse(s.take(19), DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+        .atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+} catch (_: Exception) {
+    try {
+        LocalDate.parse(s.take(10)).atTime(9, 0).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+    } catch (_: Exception) {
+        null
+    }
+}
+
+/** 展示用的截止标签 */
+internal fun dueLabel(remindAt: String?, whenText: String, now: LocalDateTime): String {
+    if (!remindAt.isNullOrBlank()) {
+        parseIso(remindAt)?.let {
+            val d = java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDateTime()
+            return "截止 " + d.monthValue + "/" + d.dayOfMonth + " " + d.toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm"))
+        }
+    }
+    val t = whenText.trim()
+    if (t.isNotEmpty()) {
+        RX_NEXTWEEK.find(t)?.value?.let { return "截止 " + it }
+        if (t.contains("周末")) return "截止 周末"
+        if (t.contains("月底") || t.contains("月末")) return "截止 月底"
+        RX_WEEK.find(t)?.value?.let { return "截止 " + t.take(12) }
+        if (t.contains("今天") || t.contains("今晚") || t.contains("明天") || t.contains("后天") || t.contains("大后天")) return "截止 " + t.take(12)
+        RX_MD.find(t)?.value?.let { return "截止 " + it }
+        RX_D.find(t)?.value?.let { return "截止 " + it }
+        RX_HM.find(t)?.value?.let { return "截止 " + it }
+        cnTime(t)?.let { return "截止 " + t.take(12) }
+    }
+    return "无期限"
+}
+
+// ---------- vc108：待确认页 / 已过期页（单开，路河拍板） ----------
+
+/** 待确认页：存量待确认队列的处理出口——逐条收下/已完成/不要，右上一键清空剩余。
+ *  vc108 起新任务直接进待办（待确认退役），本页只处理历史存量。 */
+@Composable
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+private fun ExpiredSection(
+    trows: List<TRow>,
+    onToggle: (String) -> Unit,
+    onDelete: (String) -> Unit
+) {
+    LazyColumn(
+        contentPadding = PaddingValues(bottom = 96.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 14.dp)
+    ) {
+        item(key = "ex_head") {
+            Text(
+                "已过期 ${trows.size} 件",
+                fontWeight = FontWeight.ExtraBold, color = LuyuanColors.Ink2, fontSize = 14.sp,
+                modifier = Modifier.padding(top = 10.dp, bottom = 2.dp)
+            )
+        }
+        item(key = "ex_hint") {
+            Text(
+                "过了截止还没办掉的。办完打勾，不用办的长按删除；不动它也不会再烦你。",
+                fontSize = 11.sp, color = LuyuanColors.Ink4
+            )
+        }
+        if (trows.isEmpty()) {
+            item(key = "ex_empty") {
+                Text(
+                    "没有过期积压，很干净。",
+                    fontSize = 12.sp, color = LuyuanColors.Ink4, modifier = Modifier.padding(top = 24.dp)
+                )
+            }
+        }
+        for (r in trows) {
+            item(key = "ex_${r.key}") {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(14.dp))
+                        .then(
+                            if (r.key.startsWith("msg_")) Modifier.combinedClickable(
+                                onClick = {},
+                                onLongClick = { onDelete(r.key) }
+                            ) else Modifier
+                        )
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(22.dp)
+                            .border(1.6.dp, LuyuanColors.Green700, CircleShape)
+                            .clickable { onToggle(r.key) }
+                    ) {
+                        Icon(Icons.Default.Check, "完成", tint = LuyuanColors.Green700, modifier = Modifier.size(13.dp))
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            r.text, fontSize = 13.sp, color = LuyuanColors.Ink3,
+                            maxLines = 2, overflow = TextOverflow.Ellipsis
+                        )
+                        Row {
+                            Text(
+                                r.dueLabel, fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold, color = LuyuanColors.Red
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                (r.who + " · " + r.origin).trim(' ', '·'),
+                                fontSize = 10.sp, color = LuyuanColors.Ink4
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
