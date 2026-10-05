@@ -135,7 +135,7 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
             value = LocalDateTime.now()
         }
     }
-    val rows = remember(contacts, msgTodos, pending, excluded, now) {
+    val rows = remember(contacts, msgTodos, excluded, now) {
         val out = mutableListOf<Row>()
         for (c in contacts) {
             for (t in c.undoneTodos) {
