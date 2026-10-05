@@ -12,11 +12,28 @@ import com.luyuan.data.TodoStore
 import com.luyuan.data.V2EntityRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
 import java.io.File
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+
+/**
+ * vc113 扫描底稿：每张处理过的照片留一条（缩略图+认出的文字+结果），
+ * 学业页待办签可查——漏认看得见、能救回，认字质量有据可调。只存本机 prefs（诊断数据，不同步）。
+ */
+@Serializable
+data class ScanRecord(
+    val timeMs: Long = 0,       // 照片拍摄时刻
+    val file: String = "",      // 原片绝对路径（DCIM/Camera，不移动不复制）
+    val course: String = "",    // 扫描时的课程窗口名
+    val ocrHead: String = "",   // 认出文字前两行（列表摘要）
+    val ocrFull: String = "",   // 认出全文（点开看，限 1200 字）
+    val hit: Boolean = false,   // 是否建了待办
+    val todoId: String = "",    // 建的待办 id（hit 时有值）
+    val status: String = ""     // 已建待办 / 未认出作业 / 重复·同文待办已在 / 没读出来
+)
 
 /**
  * vc112 课堂照片自动转作业待办（路河派单：下课扫系统相机新照片，OCR 认字，作业落待办）。
@@ -35,6 +52,35 @@ object PhotoScanner {
 
     private const val PREFS = "photo_scan_prefs"
     private const val KEY_SEEN = "seen_files"
+    private const val KEY_HISTORY = "scan_history"
+
+    // ---------------- 扫描底稿（vc113） ----------------
+
+    private val REC_LIST = kotlinx.serialization.builtins.ListSerializer(ScanRecord.serializer())
+
+    private fun addRecord(context: Context, r: ScanRecord) {
+        try {
+            val cur = prefs(context).getString(KEY_HISTORY, null)
+            val list: List<ScanRecord> = if (cur.isNullOrBlank()) emptyList()
+            else v2Json.decodeFromString(REC_LIST, cur)
+            val next = (list + r).takeLast(60)
+            prefs(context).edit().putString(KEY_HISTORY, v2Json.encodeToString(REC_LIST, next)).apply()
+        } catch (_: Exception) {
+        }
+    }
+
+    /** 最近扫描底稿（新→旧），学业页待办签展示 */
+    fun history(context: Context): List<ScanRecord> = try {
+        val s = prefs(context).getString(KEY_HISTORY, null)
+        if (s.isNullOrBlank()) emptyList()
+        else v2Json.decodeFromString(REC_LIST, s).sortedByDescending { it.timeMs }
+    } catch (_: Exception) {
+        emptyList()
+    }
+
+    private fun head(text: String): String =
+        text.split('\n').map { it.trim() }.filter { it.length >= 2 }.take(2).joinToString(" / ")
+            .let { if (it.length > 80) it.take(80) + "…" else it }
 
     /** 作业判定关键词（命中任一即视为作业；宁可漏认不错收，第一批先验证识别质量） */
     private val HW_KEYWORDS = listOf(
@@ -217,14 +263,23 @@ object PhotoScanner {
             if (key in seen) continue
             val text = ocrText(f)
             if (text == null) {
+                addRecord(context, ScanRecord(timeMs = t, file = f.absolutePath, course = courseName, status = "没读出来"))
                 failed.add(f.name)
                 continue
             }
             seen.add(key)   // OCR 成功即记已处理（无论是否认出作业，不重复烧电）
             photos += 1
-            if (!isHomework(text)) continue
+            if (!isHomework(text)) {
+                addRecord(
+                    context, ScanRecord(
+                        timeMs = t, file = f.absolutePath, course = courseName,
+                        ocrHead = head(text), ocrFull = text.take(1200), status = "未认出作业"
+                    )
+                )
+                continue
+            }
             val due = extractDue(text)
-            val ok = TodoStore.createFromPhoto(
+            val newId = TodoStore.createFromPhoto(
                 context,
                 text = excerpt(text),
                 course = courseName,
@@ -232,7 +287,15 @@ object PhotoScanner {
                 dueIso = due?.first ?: "",
                 raw = "课堂照片 OCR（${f.name}）：\n" + text.take(1500)
             )
-            if (ok) created += 1
+            if (newId != null) created += 1
+            addRecord(
+                context, ScanRecord(
+                    timeMs = t, file = f.absolutePath, course = courseName,
+                    ocrHead = head(text), ocrFull = text.take(1200),
+                    hit = newId != null, todoId = newId ?: "",
+                    status = if (newId != null) "已建待办" else "重复·同文待办已在"
+                )
+            )
         }
         prefs(context).edit().putStringSet(KEY_SEEN, seen).apply()
         val sb = StringBuilder()
@@ -266,13 +329,21 @@ object PhotoScanner {
         return r
     }
 
-    /** 手动补扫（学业页按钮）：今天所有已下课的课，逐个窗口扫。 */
+    /**
+     * 手动补扫（学业页按钮）：今天所有已下课的课，逐个窗口扫。
+     * vc113 修：必须过周次过滤（weeksMatch）——10-05 国庆周 bug：手动扫漏看周次，把假期里
+     * 恰好落在课程时钟窗口的照片当课堂照扫了（自动触发路一直有过滤，仅手动路漏）。
+     */
     fun scanToday(context: Context, onProgress: (String) -> Unit): Outcome {
         val today = LocalDate.now()
         val week = try { com.luyuan.domain.semesterWeekOf(today) } catch (_: Exception) { 1 }
         val courses = try { V2EntityRepository.listCourses(context) } catch (_: Exception) { emptyList() }
         val todays = courses.filter {
-            it.weekday == today.dayOfWeek.value && it.end.isNotBlank()
+            it.weekday == today.dayOfWeek.value &&
+                com.luyuan.domain.weeksMatch(it.weeks, week) && it.end.isNotBlank()
+        }
+        if (todays.isEmpty()) {
+            return Outcome(0, 0, "按课表周次今天没课，没扫（放假的课不算数）")
         }
         var totalPhotos = 0
         var totalCreated = 0

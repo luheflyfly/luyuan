@@ -116,6 +116,7 @@ object TodoStore {
     /**
      * vc112 课堂照片扫描入库（PhotoScanner 调用）：同文本未办查重 + 自动提醒，
      * 语义与 createFromPending 一致（source="photo"，sender=课程名，who=课堂照片，raw 存 OCR 全文溯源）。
+     * vc113：返回新建待办 id（扫描底稿记录要挂链）；查重挡下或写失败返回 null。
      */
     fun createFromPhoto(
         context: Context,
@@ -124,15 +125,16 @@ object TodoStore {
         whenText: String,
         dueIso: String,
         raw: String
-    ): Boolean {
-        if (text.isBlank()) return false
+    ): String? {
+        if (text.isBlank()) return null
         val fresh = textOf(text)
         for (t in list(context)) {
-            if (!t.done && textOf(t.text) == fresh) return false   // 已有同文本未办：不重复建
+            if (!t.done && textOf(t.text) == fresh) return null   // 已有同文本未办：不重复建
         }
         val now = PendingMessageTodoStore.nowIso()
+        val id = java.util.UUID.randomUUID().toString()
         val base = Todo(
-            id = java.util.UUID.randomUUID().toString(),
+            id = id,
             text = text,
             who = "课堂照片",
             when_text = whenText,
@@ -143,7 +145,7 @@ object TodoStore {
             created_at = now,
             updated_at = now
         )
-        return write(context, autoReminder(base))
+        return if (write(context, autoReminder(base))) id else null
     }
 
     /**

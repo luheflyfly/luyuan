@@ -28,6 +28,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -46,11 +47,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -64,6 +67,7 @@ import com.luyuan.data.V2EntityRepository
 import com.luyuan.domain.Note
 import com.luyuan.ui.CountUpText
 import com.luyuan.ui.rememberPressScale
+import coil.compose.AsyncImage
 import kotlin.math.roundToInt
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -1244,6 +1248,9 @@ private fun PhotoTodoSeg() {
         emptyList()
     }
     var todos by remember { mutableStateOf(loadTodos()) }
+    // vc113 扫描底稿：每张扫过的照片留档（缩略图+认字结果），漏认看得见
+    var recs by remember { mutableStateOf(PhotoScanner.history(context)) }
+    var openRec by remember { mutableStateOf<PhotoScanner.ScanRecord?>(null) }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Card(
@@ -1285,11 +1292,24 @@ private fun PhotoTodoSeg() {
                                 }
                                 status = r.detail
                                 todos = loadTodos()
+                                recs = PhotoScanner.history(context)
                                 busy = false
                             }
                         }
                         .padding(horizontal = 14.dp, vertical = 8.dp)
                 )
+            }
+        }
+
+        // vc113 最近扫描（底稿）：哪几张照片、认出了什么、结果如何，点开看全文
+        if (recs.isNotEmpty()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("最近扫描", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = LuyuanColors.Ink2)
+                Spacer(Modifier.weight(1f))
+                Text("${recs.size} 张", fontSize = 10.sp, color = LuyuanColors.Ink4)
+            }
+            for (r in recs.take(20)) {
+                ScanRecordRow(r) { openRec = r }
             }
         }
 
@@ -1371,4 +1391,94 @@ private fun PhotoTodoSeg() {
             }
         }
     }
+
+    // vc113 底稿详情：点「最近扫描」任一条看认字全文
+    openRec?.let { r ->
+        AlertDialog(
+            onDismissRequest = { openRec = null },
+            confirmButton = {
+                TextButton(onClick = { openRec = null }) { Text("关闭") }
+            },
+            title = { Text("扫描底稿", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Text(
+                        "拍摄 " + recTime(r.timeMs) + " · 窗口 " + r.course.ifBlank { "课堂" },
+                        fontSize = 11.sp, color = LuyuanColors.Ink4
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text("结果：" + r.status, fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                    if (r.todoId.isNotBlank()) {
+                        Text("待办已生成，在下方清单/待办页都能看到", fontSize = 11.sp, color = LuyuanColors.Green700)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        if (r.ocrFull.isBlank()) "（这张照片没认出文字）" else r.ocrFull,
+                        fontSize = 12.sp, lineHeight = 17.sp
+                    )
+                }
+            }
+        )
+    }
 }
+
+/** vc113 扫描底稿单行：缩略图 + 状态/时刻 + 课程/认字摘要；点开看全文（AlertDialog 在 PhotoTodoSeg） */
+@Composable
+private fun ScanRecordRow(r: PhotoScanner.ScanRecord, onOpen: () -> Unit) {
+    Card(
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpen)
+                .padding(8.dp)
+        ) {
+            AsyncImage(
+                model = java.io.File(r.file),
+                contentDescription = "课堂照片",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(RoundedCornerShape(9.dp))
+            )
+            Column(
+                Modifier
+                    .weight(1f)
+                    .padding(horizontal = 10.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        r.status,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = when {
+                            r.hit -> LuyuanColors.Green700
+                            r.status == "没读出来" -> LuyuanColors.Ink4
+                            else -> LuyuanColors.Ink2
+                        }
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(recTime(r.timeMs), fontSize = 10.sp, color = LuyuanColors.Ink4)
+                }
+                if (r.course.isNotBlank()) {
+                    Text(r.course, fontSize = 11.sp, color = LuyuanColors.Ink2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                Text(
+                    if (r.ocrHead.isBlank()) "（这张没认出文字，点开看详情）" else r.ocrHead,
+                    fontSize = 10.5.sp,
+                    color = LuyuanColors.Ink4,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    lineHeight = 14.sp
+                )
+            }
+        }
+    }
+}
+
+private fun recTime(ms: Long): String =
+    java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneId.systemDefault())
+        .format(java.time.format.DateTimeFormatter.ofPattern("MM-dd HH:mm"))
