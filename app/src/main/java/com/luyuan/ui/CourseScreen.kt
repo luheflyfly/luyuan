@@ -88,6 +88,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import com.luyuan.data.Todo
 import com.luyuan.data.TodoStore
 import com.luyuan.platform.PhotoScanner
+import com.luyuan.platform.ScanRecord
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -1250,7 +1251,7 @@ private fun PhotoTodoSeg() {
     var todos by remember { mutableStateOf(loadTodos()) }
     // vc113 扫描底稿：每张扫过的照片留档（缩略图+认字结果），漏认看得见
     var recs by remember { mutableStateOf(PhotoScanner.history(context)) }
-    var openRec by remember { mutableStateOf<PhotoScanner.ScanRecord?>(null) }
+    var openRec by remember { mutableStateOf<ScanRecord?>(null) }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Card(
@@ -1424,7 +1425,7 @@ private fun PhotoTodoSeg() {
 
 /** vc113 扫描底稿单行：缩略图 + 状态/时刻 + 课程/认字摘要；点开看全文（AlertDialog 在 PhotoTodoSeg） */
 @Composable
-private fun ScanRecordRow(r: PhotoScanner.ScanRecord, onOpen: () -> Unit) {
+private fun ScanRecordRow(r: ScanRecord, onOpen: () -> Unit) {
     Card(
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)

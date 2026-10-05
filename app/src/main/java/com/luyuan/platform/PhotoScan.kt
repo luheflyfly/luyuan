@@ -10,6 +10,7 @@ import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
 import com.luyuan.data.TodoStore
 import com.luyuan.data.V2EntityRepository
+import com.luyuan.data.v2Json
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
