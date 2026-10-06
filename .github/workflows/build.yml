@@ -64,7 +64,7 @@ jobs:
           echo "--- assets ---"; ls -la app/src/main/assets/zipformer-zh-small-ctc
 
       - name: Build debug APK
-        run: gradle assembleDebug --no-daemon
+        run: gradle testDebugUnitTest assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

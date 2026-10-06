@@ -14,8 +14,8 @@ android {
         // minSdk 24 名义支持两个必崩的 API 版本（真机均为新系统故未炸）；26 = Android 8.0（2017）
         minSdk = 26
         targetSdk = 34
-        versionCode = 118
-        versionName = "1.41.0"
+        versionCode = 119
+        versionName = "1.42.0"
         // 离线识别（sherpa-onnx）jniLib 只带 arm64（用户真机为 arm64，控制 APK 体积）
         ndk {
             abiFilters += "arm64-v8a"
@@ -76,6 +76,7 @@ android {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
     val composeBom = "2024.06.00"
     implementation(platform("androidx.compose:compose-bom:$composeBom"))
     implementation("androidx.compose.ui:ui")
