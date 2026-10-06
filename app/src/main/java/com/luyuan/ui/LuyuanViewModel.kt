@@ -646,8 +646,17 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
         wavRecorder = com.luyuan.data.AudioRecorder(
             java.io.File(StorageLocator.audioDir(ctx), "$id.wav")
         ) { chunk -> onWavPcm(chunk) }
+        val started = try { wavRecorder?.start() ?: false } catch (_: Exception) { false }
+        if (!started) {
+            // vc117：AudioRecorder.start 自检失败（存储写不进/无麦克风权限）——明确报错，绝不空壳假录
+            wavRecorder = null
+            wavId = null
+            _wavStartedAt.value = 0L
+            _isRecording.value = false
+            _voiceError.value = "录不了：存储写不进去或麦克风没权限，检查后重试"
+            return
+        }
         try {
-            wavRecorder?.start()
             _isRecording.value = true
             // vc110 P5：已录时长统一在这里算（暂停冻结），替代录音页各自起线程的老写法
             wavTicker = viewModelScope.launch {

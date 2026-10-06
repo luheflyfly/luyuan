@@ -43,27 +43,54 @@ class AudioRecorder(
     /** finalize（头修好、流关死）后倒计数；转写方 awaitReady 等它（P6） */
     private val done = CountDownLatch(1)
 
-    fun start() {
+    /**
+     * vc117 开录前三重自检（路河拍板"录音之前确认权限是否到位"）：
+     * ①写盘（占位头落得进去）②capture 标记（没了它被杀后 P1 抢救不认）③麦克风可初始化（无权限时
+     * AudioRecord state=UNINITIALIZED）。任一失败=清理半截文件并返回 false——此前失败被静默吞，
+     * 界面照常"录音"，PCM 每块白丢，录 1 小时盘上只有 44 字节空壳（违"原声永不丢"）。
+     */
+    fun start(): Boolean {
         val sampleRate = SAMPLE_RATE
         val chanCfg = AudioFormat.CHANNEL_IN_MONO
         val fmt = AudioFormat.ENCODING_PCM_16BIT
         val minBuf = AudioRecord.getMinBufferSize(sampleRate, chanCfg, fmt)
-        record = AudioRecord(MediaRecorder.AudioSource.MIC, sampleRate, chanCfg, fmt, minBuf * 2)
-        record?.startRecording()
-        running = true
-        written = 0L
-        try {
-            // 立即落 44 字节占位头
-            val os = FileOutputStream(outputWav)
-            os.write(placeholderHeader(sampleRate))
-            os.flush()
-            out = os
-            // capture 标记：两行文本 = startedAtMillis / wav 文件名（RecordingRescue 消费）
-            mark = File(outputWav.parentFile, outputWav.name + ".capture").apply {
+        // ① 写盘自检：占位头落得进去才有资格录
+        val os: FileOutputStream = try {
+            FileOutputStream(outputWav).apply {
+                write(placeholderHeader(sampleRate))
+                flush()
+            }
+        } catch (_: Exception) {
+            try { outputWav.delete() } catch (_: Exception) {}
+            return false
+        }
+        out = os
+        // ② capture 标记自检（RecordingRescue 消费：两行文本 = startedAtMillis / wav 文件名）
+        mark = try {
+            File(outputWav.parentFile, outputWav.name + ".capture").apply {
                 writeText(System.currentTimeMillis().toString() + "\n" + outputWav.name)
             }
         } catch (_: Exception) {
+            try { os.close() } catch (_: Exception) {}
+            try { outputWav.delete() } catch (_: Exception) {}
+            out = null
+            return false
         }
+        // ③ 麦克风自检（无 RECORD_AUDIO 权限时 state=UNINITIALIZED，startRecording 必然白录）
+        record = AudioRecord(MediaRecorder.AudioSource.MIC, sampleRate, chanCfg, fmt, minBuf * 2)
+        if (record?.state != AudioRecord.STATE_INITIALIZED) {
+            try { record?.release() } catch (_: Exception) {}
+            record = null
+            try { mark?.delete() } catch (_: Exception) {}
+            mark = null
+            try { os.close() } catch (_: Exception) {}
+            try { outputWav.delete() } catch (_: Exception) {}
+            out = null
+            return false
+        }
+        record?.startRecording()
+        running = true
+        written = 0L
         thread = Thread {
             val buffer = ByteArray(minBuf)
             try {
@@ -88,6 +115,7 @@ class AudioRecorder(
             }
         }
         thread?.start()
+        return true
     }
 
     fun stop() {
