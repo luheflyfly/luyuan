@@ -23,13 +23,18 @@ import com.luyuan.data.IslandSettings
  * vc111 假灵动岛（2026-09-28 路河派单）：黑色悬浮胶囊贴摄像头挖孔，轻提示三类事件——
  * 录音计时（常驻，LuyuanService 驱动）/ 待办收录（可直操已完成/不要）/ 提醒与简报（可跳 App）。
  *
- * 设计约束：
- * - 无 Service：直接 WindowManager 加窗。悬浮窗权限（SYSTEM_ALERT_WINDOW）没授就加不上，
- *   静默不显示（平板没授权=自动没有）；事件源（监听器/Receiver/前台服务）各自带上下文进来，
- *   避开"后台不能 startService"的系统限制。
- * - 原生 View 不上 Compose：悬浮窗没有 lifecycle owner，原生件最稳、不依赖 App 界面存活。
- * - 进程被整体杀掉时悬浮窗随进程自动消失，不会留鬼影。
- * - 任何异常一律吞掉：胶囊只是提示层，绝不因为它炸到录音/待办主链路。
+ * vc121（2026-10-06 路河拍板"都做"）：胶囊点按=展开面板（紧凑/面板两形态，中档第一枪）。
+ * - 紧凑路径原样保留（vc111 双机验证过的"整窗拆掉重挂"活路，不动）。
+ * - 展开窗走 island-demo 验证过的姿势（2026-10-06 实测：定宽 EXACTLY + 显式 measure AT_MOST
+ *   不塌、连切 20 次零泄漏；旧案真因=Activity 重建致窗引用孤儿化，IslandManager 是 object
+ *   常驻单例天然免疫，但失同步守卫照样上）。
+ * - 点胶囊=展开面板（原"直接开 App"退役）；面板内"打开App"键补跳转；点头部/收起键回紧凑。
+ * - 展开态不自动隐藏（用户在读）；紧凑态自动隐藏节奏不变。录音控制键（暂停/停止）涉录音线
+ *   领地，本批不做，面板只读+跳转。
+ *
+ * 设计约束（继承 vc111）：
+ * - 无 Service：直接 WindowManager 加窗，事件源自带上下文进来。
+ * - 原生 View 不上 Compose；进程死窗随进程消失；任何异常吞掉，绝不炸主链路。
  */
 object IslandManager {
 
@@ -43,6 +48,12 @@ object IslandManager {
     private enum class Mode { RECORDING, TODO, REMINDER, BRIEF }
 
     private var mode: Mode? = null
+
+    // vc121 展开态
+    private var expanded = false
+    private var expandedRoot: LinearLayout? = null
+    private var expandedAdded = false
+    private var expLabel: TextView? = null
 
     // 录音态（LuyuanService 驱动；数据只在主线程读写）
     private var recording = false
@@ -65,7 +76,7 @@ object IslandManager {
     private var hider: Runnable? = null
     private var ticker: Runnable? = null
 
-    // ---------- 事件入口（外部只认这五个） ----------
+    // ---------- 事件入口（外部只认这五个 + offNow） ----------
 
     fun recordingStart(ctx: Context) {
         prep(ctx)
@@ -170,20 +181,53 @@ object IslandManager {
         mode = m
         unpost(hider); unpost(ticker)
         hider = null; ticker = null
+        if (expanded) {
+            // 展开态来了新事件：面板整窗重挂（首布局稳定路径），不自动隐藏
+            removeExpandedNow()
+            if (!ensureExpandedWindow()) { collapseToCompact(0L); return }
+            rebuildExpanded()
+            pop(expandedRoot)
+            return
+        }
         // 本机实测（MagicOS/OriginOS 2026-09-28）：悬浮窗原地换内容必塌宽（连计时器刷文字
-        // 都可能触发），唯一稳定路径=新挂窗的第一次布局。所以一切形态切换都整窗拆掉重挂。
+        // 都可能触发），唯一稳定路径=新挂窗的第一次布局。紧凑形态一切切换都整窗拆掉重挂。
         removeWindowNow()
         if (!ensureWindow()) return
         rebuild()
-        pop()
+        pop(root)
         if (autoHideMs > 0L) {
-            val run = Runnable { try { if (mode == m) hideNow() } catch (_: Throwable) { } }
+            val run = Runnable { try { if (mode == m && !expanded) hideNow() } catch (_: Throwable) { } }
             hider = run
             main.postDelayed(run, autoHideMs)
         }
     }
 
-    /** 点胶囊=直接开 App（展开态在本机悬浮窗测量有系统级坑，2026-09-28 拍板砍掉，下批再战） */
+    /** vc121：点紧凑胶囊=展开面板（原"直接开 App"退役，跳转入面板键） */
+    private fun expand() {
+        try {
+            val m = mode ?: return
+            expanded = true
+            show(m, 0L)
+        } catch (e: Throwable) { log("expand threw: $e") }
+    }
+
+    /** vc121：回紧凑。自动隐藏类事件回紧凑后重新计时 */
+    private fun collapseToCompact(autoHideMs: Long) {
+        expanded = false
+        expLabel = null
+        removeExpandedNow()
+        val m = mode ?: return
+        show(m, autoHideMs)
+    }
+
+    /** vc121：彻底收起（面板与胶囊都收） */
+    private fun removeExpandedNow() {
+        val box = expandedRoot ?: return
+        expandedRoot = null; expandedAdded = false; expLabel = null
+        try { wm?.removeView(box); log("expanded removed") } catch (e: Throwable) { log("removeExpanded threw: $e") }
+    }
+
+    /** 点胶囊=展开面板（紧凑/面板两形态，vc121）。老注释：展开态测量坑已由 island-demo 姿势破局 */
     private fun removeWindowNow() {
         val box = root ?: return
         root = null; added = false; pillText = null
@@ -194,6 +238,8 @@ object IslandManager {
     private fun ensureWindow(): Boolean {
         val c = appCtx ?: return false
         val w = wm ?: return false
+        // 失同步守卫（island-demo 实证姿势）：引用还在但窗已不在 → 重置引用重新挂
+        if (added && root?.windowToken == null) { root = null; added = false; pillText = null }
         if (added && root != null) return true
         val canDraw = try { Settings.canDrawOverlays(c) } catch (_: Throwable) { false }
         if (!canDraw) return false
@@ -218,6 +264,43 @@ object IslandManager {
             true
         } catch (_: Throwable) {
             root = null; added = false
+            false
+        }
+    }
+
+    /** vc121 展开窗：定宽（demo 验证姿势）+ 显式 measure，杜绝 wrap_content 自由发挥 */
+    private fun ensureExpandedWindow(): Boolean {
+        val c = appCtx ?: return false
+        val w = wm ?: return false
+        if (expandedAdded && expandedRoot?.windowToken == null) { expandedRoot = null; expandedAdded = false; expLabel = null }
+        if (expandedAdded && expandedRoot != null) return true
+        val canDraw = try { Settings.canDrawOverlays(c) } catch (_: Throwable) { false }
+        if (!canDraw) return false
+        val box = LinearLayout(c)
+        box.orientation = LinearLayout.VERTICAL
+        val widthPx = dip(300f)
+        val lp = WindowManager.LayoutParams(
+            widthPx,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT
+        )
+        lp.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+        lp.y = statusBarPx(c) + dip(2f)
+        return try {
+            // 显式 measure：宽 EXACTLY 定值、高 AT_MOST 可用屏高（island-demo 验证不塌的关键一手）
+            val availH = c.resources.displayMetrics.heightPixels - statusBarPx(c) - dip(24f)
+            box.measure(
+                View.MeasureSpec.makeMeasureSpec(widthPx, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(availH, View.MeasureSpec.AT_MOST)
+            )
+            w.addView(box, lp)
+            expandedRoot = box; expandedAdded = true
+            true
+        } catch (_: Throwable) {
+            expandedRoot = null; expandedAdded = false
             false
         }
     }
@@ -250,6 +333,70 @@ object IslandManager {
         log("rebuilt mode=$mode childCount=${box.childCount}")
     }
 
+    /** vc121 展开面板：标题行（叶标+标题+收起）+ 正文全文 + 跳转键 */
+    private fun rebuildExpanded() {
+        val c = appCtx ?: return
+        val box = expandedRoot ?: return
+        box.removeAllViews()
+        expLabel = null
+        try {
+            val panel = LinearLayout(c).apply {
+                orientation = LinearLayout.VERTICAL
+                background = panelBg()
+                setPadding(dip(16f), dip(14f), dip(16f), dip(14f))
+            }
+            data class Content(val title: String, val body: String, val action: String?, val page: String?)
+            val content = when (mode) {
+                Mode.RECORDING -> Content(recLabel(), "", null, null)
+                Mode.TODO -> Content("待办已收录 · $todoWho", todoBody, "打开待办页", "todos")
+                Mode.REMINDER -> Content(remTitle, remBody, "查看详情", null)
+                Mode.BRIEF -> Content("晨间简报", briefBody, "打开笔记", "notes")
+                null -> return
+            }
+            // 标题行：叶标 + 标题(占满) + 收起
+            val head = hrow(c).apply { gravity = Gravity.CENTER_VERTICAL }
+            head.addView(leaf(c, dip(24f)))
+            head.addView(gap(8))
+            val title = label(c, content.title, bold = true)
+            title.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            head.addView(title)
+            head.addView(closeChip(c))
+            panel.addView(head)
+            // 正文（录音态=计时大字，其余=全文多行）
+            if (content.body.isNotEmpty()) {
+                panel.addView(gap(8))
+                panel.addView(bodyLabel(c, content.body))
+            }
+            // 录音态：大号计时行（ticker 同步刷）
+            if (mode == Mode.RECORDING) {
+                panel.addView(gap(6))
+                val t = TextView(c).apply {
+                    text = recLabel()
+                    setTextColor(Color.WHITE)
+                    textSize = 26f
+                    typeface = Typeface.DEFAULT_BOLD
+                }
+                expLabel = t
+                panel.addView(t)
+            }
+            // 跳转键
+            content.action?.let { act ->
+                panel.addView(gap(4))
+                panel.addView(actionChip(c, act) {
+                    when (mode) {
+                        Mode.REMINDER -> openApp(remDetailId)
+                        else -> openApp(null, content.page)
+                    }
+                })
+            }
+            box.addView(panel)
+        } catch (e: Throwable) {
+            log("rebuildExpanded THREW mode=$mode: $e")
+            for (s in e.stackTrace.take(8)) log("  at $s")
+        }
+        log("rebuildExpanded mode=$mode childCount=${box.childCount}")
+    }
+
     private fun log(m: String) {
         try { android.util.Log.d("IslandMgr", m) } catch (_: Throwable) { }
     }
@@ -257,9 +404,12 @@ object IslandManager {
     private fun hideNow() {
         unpost(hider); unpost(ticker)
         hider = null; ticker = null
+        mode = null; pillText = null
+        expanded = false; expLabel = null
+        // vc121：两形态一起收（面板在场时先摘面板）
+        removeExpandedNow()
         val box = root ?: return
         root = null; added = false
-        mode = null; pillText = null
         try {
             box.animate().translationY(-dip(20f).toFloat()).alpha(0f).setDuration(160L)
                 .withEndAction { try { wm?.removeView(box) } catch (_: Throwable) { } }
@@ -273,7 +423,7 @@ object IslandManager {
         if (r != null) main.removeCallbacks(r)
     }
 
-    // ---------- 各形态 ----------
+    // ---------- 各形态（紧凑） ----------
 
     private fun recCompact(c: Context, box: LinearLayout) {
         val row = hrow(c)
@@ -286,7 +436,7 @@ object IslandManager {
         pillText = tv
         row.addView(tv)
         row.setOnClickListener { v ->
-            try { openApp(null) } catch (_: Throwable) { }
+            try { expand() } catch (_: Throwable) { }
         }
         box.addView(row)
         startTicker()
@@ -304,14 +454,7 @@ object IslandManager {
         pillText = tv
         row.addView(tv)
         row.setOnClickListener { v ->
-            try {
-                when (mode) {
-                    Mode.REMINDER -> openApp(remDetailId)
-                    Mode.TODO -> openApp(null, "todos")
-                    Mode.BRIEF -> openApp(null, "notes")
-                    else -> openApp(null)
-                }
-            } catch (_: Throwable) { }
+            try { expand() } catch (_: Throwable) { }
         }
         box.addView(row)
     }
@@ -323,7 +466,9 @@ object IslandManager {
             override fun run() {
                 try {
                     if (!recording || mode != Mode.RECORDING) return
-                    pillText?.text = recLabel()
+                    val text = recLabel()
+                    pillText?.text = text
+                    if (expanded) expLabel?.text = text   // vc121 面板里的计时行同步刷
                 } catch (_: Throwable) { }
                 main.postDelayed(this, 500L)
             }
@@ -356,6 +501,11 @@ object IslandManager {
         cornerRadius = dip(999f).toFloat()
     }
 
+    private fun panelBg(): GradientDrawable = GradientDrawable().apply {
+        setColor(Color.parseColor("#F20B0B0B"))
+        cornerRadius = dip(20f).toFloat()
+    }
+
     private fun dot(c: Context): View = View(c).apply {
         layoutParams = LinearLayout.LayoutParams(dip(9f), dip(9f))
         background = GradientDrawable().apply {
@@ -378,6 +528,41 @@ object IslandManager {
         ellipsize = TextUtils.TruncateAt.END
     }
 
+    private fun bodyLabel(c: Context, text: String): TextView = TextView(c).apply {
+        this.text = text
+        setTextColor(Color.parseColor("#FFD9E2DC"))
+        textSize = 13.5f
+        maxLines = 6
+        ellipsize = TextUtils.TruncateAt.END
+        setLineSpacing(dip(2f).toFloat(), 1f)
+    }
+
+    private fun actionChip(c: Context, text: String, onClick: () -> Unit): TextView = TextView(c).apply {
+        this.text = text
+        setTextColor(Color.WHITE)
+        textSize = 13f
+        typeface = Typeface.DEFAULT_BOLD
+        gravity = Gravity.CENTER
+        background = GradientDrawable().apply {
+            setColor(Color.parseColor("#33224A3A"))
+            cornerRadius = dip(999f).toFloat()
+            setStroke(dip(1f), Color.parseColor("#66224A3A"))
+        }
+        setPadding(dip(14f), dip(7f), dip(14f), dip(7f))
+        layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+        ).topMargin = dip(10f)
+        setOnClickListener { try { onClick() } catch (_: Throwable) { } }
+    }
+
+    private fun closeChip(c: Context): TextView = TextView(c).apply {
+        this.text = "收起"
+        setTextColor(Color.parseColor("#8FA79B"))
+        textSize = 12.5f
+        setPadding(dip(8f), dip(4f), dip(8f), dip(4f))
+        setOnClickListener { try { collapseToCompact(if (mode == Mode.RECORDING) 0L else 6000L) } catch (_: Throwable) { } }
+    }
+
     private fun hrow(c: Context): LinearLayout =
         LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL }
 
@@ -385,10 +570,10 @@ object IslandManager {
         layoutParams = LinearLayout.LayoutParams(dip(dp.toFloat()), 1)
     }
 
-    private fun pop() {
-        val r = root ?: return
-        r.translationY = -dip(14f).toFloat(); r.alpha = 0.4f
-        r.animate().translationY(0f).alpha(1f).setDuration(150L).start()
+    private fun pop(r: LinearLayout?) {
+        val target = r ?: return
+        target.translationY = -dip(14f).toFloat(); target.alpha = 0.4f
+        target.animate().translationY(0f).alpha(1f).setDuration(150L).start()
     }
 
     private fun dip(v: Float): Int {
