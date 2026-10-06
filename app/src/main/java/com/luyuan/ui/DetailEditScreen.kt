@@ -1,5 +1,6 @@
 package com.luyuan.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -88,6 +89,9 @@ fun DetailEditScreen(
     var rawText by remember { mutableStateOf<String?>(null) }
     var showRaw by remember { mutableStateOf(false) }
     var loaded by remember { mutableStateOf(false) }
+    var origText by remember { mutableStateOf("") }
+    var origTags by remember { mutableStateOf("") }
+    var confirmExit by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
@@ -101,6 +105,8 @@ fun DetailEditScreen(
             n?.let {
                 text = it.text
                 tagsText = it.tags.joinToString(", ")
+                origText = it.text
+                origTags = tagsText
                 remindAt = it.remind_at
                 audioRel = it.audio
                 images = it.images
@@ -113,6 +119,11 @@ fun DetailEditScreen(
         }
     }
 
+    // vc116：有未保存修改时，返回/取消先问一句（路河 10-06 拍板；此前直接丢改动违"永不丢内容"）
+    val dirty = loaded && (text != origText || tagsText != origTags)
+    fun tryExit() { if (dirty) confirmExit = true else onBack() }
+    BackHandler(enabled = dirty) { confirmExit = true }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -123,7 +134,7 @@ fun DetailEditScreen(
                 ),
                 title = { Text("记事详情", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = { tryExit() }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                     }
                 },
@@ -143,7 +154,7 @@ fun DetailEditScreen(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 TextButton(
-                    onClick = onBack,
+                    onClick = { tryExit() },
                     modifier = Modifier.weight(1f)
                 ) { Text("取消") }
                 Button(
@@ -401,6 +412,28 @@ fun DetailEditScreen(
                 }
             }
         }
+    }
+
+    if (confirmExit) {
+        AlertDialog(
+            onDismissRequest = { confirmExit = false },
+            title = { Text("有修改还没保存", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+            text = { Text("退出就白改了。要保存这份修改吗？", fontSize = 13.sp) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmExit = false
+                    val tags = tagsText.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                    vm.updateNote(noteId, text, tags)
+                    onBack()
+                }) { Text("保存并退出", fontWeight = FontWeight.SemiBold) }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { confirmExit = false }) { Text("继续编辑") }
+                    TextButton(onClick = onBack) { Text("不保存", color = LuyuanColors.Red) }
+                }
+            }
+        )
     }
 
     if (pendingDelete) {

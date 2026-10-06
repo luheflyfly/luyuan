@@ -88,18 +88,38 @@ fun LedgerScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit) {
     val ctx = LocalContext.current
     var pending by remember { mutableStateOf(PendingExpenseStore.list(ctx)) }
     val listenerOn = remember { PaymentNotificationListener.enabled(ctx) }
+    // vc116：热刷新——支付通知到手后切进本页立即可见（此前 remember 初始读盘，新通知永不出现）
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
+            if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) pending = PendingExpenseStore.list(ctx)
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
 
     fun confirmPending(p: PendingExpense, category: String) {
-        try {
-            val now = OffsetDateTime.now().toString()
-            val e = Expense(
-                kind = "expense", id = p.id, amount = p.amount, item = p.merchant,
-                category = category, spent_at = now, source = "notification",
-                device = "phone", created_at = now, updated_at = now
-            )
-            java.io.File(StorageLocator.getRoot(ctx), "expense_${p.id}.json")
-                .writeText(v2Json.encodeToString(Expense.serializer(), e))
+        val now = OffsetDateTime.now().toString()
+        val e = Expense(
+            kind = "expense", id = p.id, amount = p.amount, item = p.merchant,
+            category = category, spent_at = now, source = "notification",
+            device = "phone", created_at = now, updated_at = now
+        )
+        // vc116：原子写+失败不删待确认（此前写失败也删——账没记上通知还回不来，这笔账就真丢了）
+        val f = java.io.File(StorageLocator.getRoot(ctx), "expense_${p.id}.json")
+        val ok = try {
+            val tmp = java.io.File(f.parentFile, f.name + ".tmp")
+            tmp.writeText(v2Json.encodeToString(Expense.serializer(), e), Charsets.UTF_8)
+            tmp.renameTo(f) || (f.delete() && tmp.renameTo(f))
         } catch (_: Exception) {
+            false
+        }
+        if (!ok) {
+            android.widget.Toast.makeText(
+                ctx, "入账没写进去（同步目录暂时写不了），这条还留着，稍等再点一次",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+            return
         }
         PendingExpenseStore.remove(ctx, p.id)
         pending = PendingExpenseStore.list(ctx)

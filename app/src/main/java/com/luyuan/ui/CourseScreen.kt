@@ -248,7 +248,7 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
     var selCat by remember { mutableStateOf<String?>(null) } // 图例筛选（四分类单选，再点取消）
     var addSlot by remember { mutableStateOf<AddSlot?>(null) }
 
-    val next = remember(courses) { nextCourse(courses) }
+    val next = remember(courses, start) { nextCourse(courses, start) }
     val weekCourses = remember(courses, week) { courses.filter { courseInWeek(it, week) } }
     val slots = remember(weekCourses) {
         weekCourses.map { it.start }.filter { it.isNotBlank() }.distinct().sorted().take(8)
@@ -367,7 +367,7 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
 
             // 下一节深绿卡（旧版保留，功能不回退）
             if (next != null) {
-                val (c, mins) = next
+                val (c, mins, dayOffset) = next
                 item {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -383,7 +383,12 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                     ) {
                         Column(Modifier.weight(1f)) {
                             Text(
-                                "下一节 · " + c.start,
+                                when {
+                                    dayOffset == 0 -> "下一节 · " + c.start
+                                    dayOffset == 1 -> "明早 · " + c.start
+                                    else -> DayOfWeek.of((today.dayOfWeek.value - 1 + dayOffset) % 7 + 1)
+                                        .getDisplayName(TextStyle.SHORT, Locale.CHINA) + " · " + c.start
+                                },
                                 fontSize = 11.sp,
                                 color = Color(0xFFCFE0D6),
                                 modifier = Modifier
@@ -399,13 +404,24 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                             )
                         }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CountUpText(
-                                target = mins.toDouble(),
-                                format = { it.roundToInt().toString() },
-                                style = androidx.compose.ui.text.TextStyle(fontSize = 34.sp, fontWeight = FontWeight.Bold),
-                                color = Color.White
-                            )
-                            Text("分钟后上课", fontSize = 11.sp, color = Color(0xFFCFE0D6))
+                            if (mins != null) {
+                                CountUpText(
+                                    target = mins.toDouble(),
+                                    format = { it.roundToInt().toString() },
+                                    style = androidx.compose.ui.text.TextStyle(fontSize = 34.sp, fontWeight = FontWeight.Bold),
+                                    color = Color.White
+                                )
+                                Text("分钟后上课", fontSize = 11.sp, color = Color(0xFFCFE0D6))
+                            } else {
+                                Text(
+                                    c.start,
+                                    fontSize = 30.sp, fontWeight = FontWeight.Bold, color = Color.White
+                                )
+                                Text(
+                                    if (dayOffset == 1) "明早上课" else "上课",
+                                    fontSize = 11.sp, color = Color(0xFFCFE0D6)
+                                )
+                            }
                         }
                     }
                 }
@@ -1170,19 +1186,22 @@ internal fun slotToMin(s: String): Int {
     return (p.getOrNull(0)?.toIntOrNull() ?: 0) * 60 + (p.getOrNull(1)?.toIntOrNull() ?: 0)
 }
 
-/** 下一节课：今天尚未开始的最早一节 →（课，距开始分钟数）；否则顺延最近有课日（分钟数给 0） */
-internal fun nextCourse(courses: List<Course>): Pair<Course, Int>? {
+/** 下一节课：今天尚未上且本周确有的一节 → (课, 距分钟, 0)；今天没了→顺延最近"真有课"的日子 (课, null, 天数)。
+ *  vc116 两修：①顺延分钟数不再给 0（夜间曾显示"0 分钟后上课"实为明天的课）；②按那天所属周次过滤
+ *  （军训/停课周课表上排了但实际没有的课不再被显示，路河 10-06 问询）。 */
+internal fun nextCourse(courses: List<Course>, semStart: LocalDate): Triple<Course, Int?, Int>? {
     if (courses.isEmpty()) return null
-    val todayDow = LocalDate.now().dayOfWeek.value
+    val today = LocalDate.now()
+    val todayDow = today.dayOfWeek.value
     val nowMin = LocalTime.now().let { it.hour * 60 + it.minute }
-    courses.filter { it.weekday == todayDow && slotToMin(it.start) >= nowMin }
+    courses.filter { it.weekday == todayDow && courseInWeek(it, weekOf(semStart, today)) && slotToMin(it.start) >= nowMin }
         .minByOrNull { slotToMin(it.start) }
-        ?.let { return it to (slotToMin(it.start) - nowMin) }
+        ?.let { return Triple(it, slotToMin(it.start) - nowMin, 0) }
     for (delta in 1..7) {
-        val wd = (todayDow + delta - 1) % 7 + 1
-        courses.filter { it.weekday == wd }
+        val d = today.plusDays(delta.toLong())
+        courses.filter { it.weekday == d.dayOfWeek.value && courseInWeek(it, weekOf(semStart, d)) }
             .minByOrNull { slotToMin(it.start) }
-            ?.let { return it to 0 }
+            ?.let { return Triple(it, null, delta) }
     }
     return null
 }
