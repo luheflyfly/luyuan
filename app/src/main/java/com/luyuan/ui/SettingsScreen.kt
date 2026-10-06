@@ -57,6 +57,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.luyuan.BuildConfig
 import com.luyuan.data.AskRemote
 import com.luyuan.data.IslandSettings
+import com.luyuan.data.MessageKeywordRules
 import com.luyuan.data.MessageSettings
 import com.luyuan.data.NoteRepository
 import com.luyuan.platform.PermissionHelper
@@ -426,6 +427,8 @@ private fun MessageTodoCard() {
     var sent by remember { mutableStateOf(MessageSettings.sentCountThisMonth(context)) }
     var excluded by remember { mutableStateOf(MessageSettings.excludedContacts(context)) }
     var newExcluded by remember { mutableStateOf("") }
+    var kwRules by remember { mutableStateOf(MessageKeywordRules.list(context)) }
+    var newKw by remember { mutableStateOf("") }
 
     Column(
         modifier = Modifier
@@ -590,6 +593,54 @@ private fun MessageTodoCard() {
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+
+            // ⑥ 关键词保底（vc120 中档·路河拍板）：用户关注词命中且云端零任务 → 本地兜底落待办
+            Text("⑥我的关注词（本地保底）", fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
+            Text(
+                "消息里出现这些词、而云端又没判出待办时，这条消息直接落成待办不出网兜丢；命中后 2 秒内就处理。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            kwRules.forEach { r ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        r.keyword + if (r.enabled) "" else "（已停用）",
+                        fontSize = 13.sp,
+                        color = if (r.enabled) LuyuanColors.Ink2 else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        "移出", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable {
+                            MessageKeywordRules.remove(context, r.id)
+                            kwRules = MessageKeywordRules.list(context)
+                        }
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Switch(
+                        checked = r.enabled,
+                        onCheckedChange = {
+                            MessageKeywordRules.setEnabled(context, r.id, it)
+                            kwRules = MessageKeywordRules.list(context)
+                        }
+                    )
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = newKw,
+                    onValueChange = { newKw = it },
+                    singleLine = true,
+                    placeholder = { Text("如：作业、截止、考试", fontSize = 12.sp) },
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = {
+                    MessageKeywordRules.add(context, newKw)
+                    newKw = ""
+                    kwRules = MessageKeywordRules.list(context)
+                }) { Text("加入") }
+            }
         }
     }
 }

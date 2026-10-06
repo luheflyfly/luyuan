@@ -8,6 +8,7 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import com.luyuan.data.BufferedMessage
 import com.luyuan.data.MessageBuffer
+import com.luyuan.data.MessageKeywordRules
 import com.luyuan.data.MessageSettings
 import com.luyuan.data.MessageTodoExtractor
 import com.luyuan.data.PendingMessageTodo
@@ -74,9 +75,11 @@ class MessageNotificationListener : NotificationListenerService() {
             // 60 秒内同发送者 + 同内容只收一次（厂商会连发同内容通知）
             if (isDuplicate(title, body)) return
 
+            // vc120 关键词打标：用户关注词命中即带标记进缓冲（冲刷时零任务则兜底落待办）
+            val kwHit = try { MessageKeywordRules.hit(this, body) } catch (_: Throwable) { false }
             MessageBuffer.append(
                 this,
-                BufferedMessage(chat = title, sender = sender, body = body, at = System.currentTimeMillis())
+                BufferedMessage(chat = title, sender = sender, body = body, at = System.currentTimeMillis(), kw = kwHit)
             )
             scheduleFlush()
         } catch (_: Throwable) {
@@ -96,7 +99,9 @@ class MessageNotificationListener : NotificationListenerService() {
         if (msgs.isEmpty()) return
         val oldest = msgs.minOf { it.at }
         val full = msgs.groupingBy { it.chat }.eachCount().any { it.value >= MessageBuffer.EARLY_COUNT }
-        val delay = if (full) 2_000L
+        // vc120：带关键词命中的缓冲 2 秒内就冲（关注的事不干等满窗）
+        val kwHot = msgs.any { it.kw }
+        val delay = if (full || kwHot) 2_000L
         else maxOf(2_000L, MessageBuffer.WINDOW_MS - (System.currentTimeMillis() - oldest))
         flushHandler.removeCallbacks(flushRunnable)
         flushHandler.postDelayed(flushRunnable, delay)
@@ -186,6 +191,27 @@ class MessageNotificationListener : NotificationListenerService() {
                             // 打开待办页时经 due() 自然重试——绝不白丢上下文
                             failed.addAll(lines)
                             continue
+                        }
+                        // vc120 关键词保底：云端对整窗一个任务都没出、但窗里有命中标记的消息
+                        // → 逐条兜底落待办（用户自加关注词，意图优先于四道闸默认收窄；出过任务即视为已覆盖不重复落）
+                        val hitLines = lines.filter { it.kw }
+                        if (tasks.isEmpty() && hitLines.isNotEmpty()) {
+                            val rawAll = lines.takeLast(3).joinToString(" / ") { it.body }
+                            for (h in hitLines) {
+                                val fb = PendingMessageTodo(
+                                    id = PendingMessageTodoStore.newId(),
+                                    text = h.body.take(200),
+                                    who = h.sender,
+                                    whenText = "",
+                                    dueIso = "",
+                                    raw = rawAll.take(200),
+                                    source = "wechat_kw",
+                                    sender = chat,
+                                    created_at = PendingMessageTodoStore.nowIso()
+                                )
+                                val ok = try { TodoStore.createFromPending(ctx, fb) } catch (_: Throwable) { false }
+                                if (ok) notifyTodoAction(ctx, fb, autoAdded = true)
+                            }
                         }
                         for (t in tasks) {
                             val p = PendingMessageTodo(

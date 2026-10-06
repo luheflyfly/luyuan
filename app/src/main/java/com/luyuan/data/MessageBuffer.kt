@@ -18,7 +18,8 @@ data class BufferedMessage(
     val chat: String,      // 通知标题（群名 / 联系人备注名）
     val sender: String,    // 群消息体「昵称: 内容」里的昵称；私聊 = chat
     val body: String,
-    val at: Long           // epoch millis（窗口计时用）
+    val at: Long,          // epoch millis（窗口计时用）
+    val kw: Boolean = false // vc120 关键词命中标记：冲刷时该聊天零任务则此条兜底落待办
 )
 
 object MessageBuffer {
