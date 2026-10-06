@@ -189,65 +189,12 @@ object PhotoScanner {
             .ifBlank { "" }
     }
 
-    /** 截止抽取第一版：固定模式（X月X日 / 下周X / 周X / 星期X / 明天 / 后天 / 今天 / X号）。抽不到返回空对。 */
+    /** 截止抽取（vc118 合一：走 domain/ChineseDue 全 App 单源。此前自造子集且"周X不含今天"
+     *  与待办页口径分叉，现对齐主口径——周X含今天/下周X同算法/时段/周末/月底一并识别）。 */
     private fun extractDue(text: String): Pair<String, String>? {
-        val today = LocalDate.now()
-        var date: LocalDate? = null
-        var phrase = ""
-        val mDate = Regex("(\\d{1,2})月(\\d{1,2})日").find(text)
-        val mNextWeek = Regex("下(周|星期)([一二三四五六日天])").find(text)
-        val mWeek = Regex("(周|星期)([一二三四五六日天])").find(text)
-        val mRel = Regex("(明天|后天|今天)").find(text)
-        val mDay = Regex("(\\d{1,2})[号日]").find(text)
-        fun wdOf(c: Char): Int = when (c) {
-            '一' -> 1; '二' -> 2; '三' -> 3; '四' -> 4; '五' -> 5; '六' -> 6; else -> 7
-        }
-        when {
-            mDate != null -> {
-                val mo = mDate.groupValues[1].toIntOrNull() ?: 0
-                val dy = mDate.groupValues[2].toIntOrNull() ?: 0
-                if (mo in 1..12 && dy in 1..31) {
-                    date = try { LocalDate.of(today.year, mo, dy) } catch (_: Exception) { null }
-                    if (date != null && date!!.isBefore(today)) date = date!!.plusYears(1)
-                    phrase = mDate.value
-                }
-            }
-            mNextWeek != null -> {
-                // 下周X = 下周一（严格在本周之后）再往后数 target-1 天
-                val target = wdOf(mNextWeek.groupValues[2][0])
-                var nextMonday = today.plusDays(((1 - today.dayOfWeek.value + 7) % 7).toLong())
-                if (!nextMonday.isAfter(today)) nextMonday = nextMonday.plusDays(7)
-                date = nextMonday.plusDays((target - 1).toLong())
-                phrase = mNextWeek.value
-            }
-            mWeek != null -> {
-                val target = wdOf(mWeek.groupValues[2][0])
-                var d = today.plusDays(((target - today.dayOfWeek.value + 7) % 7).toLong())
-                if (!d.isAfter(today)) d = d.plusDays(7)
-                date = d
-                phrase = mWeek.value
-            }
-            mRel != null -> {
-                date = when (mRel.value) {
-                    "明天" -> today.plusDays(1)
-                    "后天" -> today.plusDays(2)
-                    else -> today
-                }
-                phrase = mRel.value
-            }
-            mDay != null -> {
-                val dy = mDay.groupValues[1].toIntOrNull() ?: 0
-                if (dy in 1..31) {
-                    date = try { LocalDate.of(today.year, today.month, dy) } catch (_: Exception) { null }
-                    if (date != null && date!!.isBefore(today)) date = date!!.plusMonths(1)
-                    phrase = mDay.value
-                }
-            }
-        }
-        if (date == null) return null
-        val due = LocalDateTime.of(date, LocalTime.of(23, 59))
-            .atZone(java.time.ZoneId.systemDefault())
-        return Pair(due.format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME), phrase)
+        val hit = com.luyuan.domain.ChineseDue.parse(text, java.time.LocalDateTime.now()) ?: return null
+        val due = hit.at.atZone(java.time.ZoneId.systemDefault())
+        return Pair(due.format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME), hit.phrase)
     }
 
     // ---------------- 主流程 ----------------

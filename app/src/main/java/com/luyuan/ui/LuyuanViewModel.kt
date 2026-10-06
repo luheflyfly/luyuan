@@ -371,14 +371,9 @@ class LuyuanViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 解析生日串为 月/日（支持 "10月20日" / "10-20" / "2026-10-20" / "10/20"） */
-    private fun parseBirthdayMd(s: String): Pair<Int, Int>? {
-        val m = Regex("""(\d{1,2})\s*[月/\-./]\s*(\d{1,2})""").find(s) ?: return null
-        val a = m.groupValues[1].toIntOrNull() ?: return null
-        val b = m.groupValues[2].toIntOrNull() ?: return null
-        if (a in 1..12 && b in 1..31) return a to b
-        return null
-    }
+    /** vc118 合一：解析走 domain/ChineseDue 单源 */
+    private fun parseBirthdayMd(s: String): Pair<Int, Int>? =
+        com.luyuan.domain.ChineseDue.parseBirthdayMonthDay(s)
 
     /** v2 名片页：生日提前 3 天提醒——复用待办提醒通道（不新增联系人字段、不改 SYNC_FORMAT） */
     fun setContactBirthdayReminder(contactId: String) {
