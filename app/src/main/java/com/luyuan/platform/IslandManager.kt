@@ -551,7 +551,7 @@ object IslandManager {
         setPadding(dip(14f), dip(7f), dip(14f), dip(7f))
         layoutParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
-        ).topMargin = dip(10f)
+        ).apply { topMargin = dip(10f) }
         setOnClickListener { try { onClick() } catch (_: Throwable) { } }
     }
 
