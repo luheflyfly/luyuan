@@ -680,6 +680,7 @@ private fun todoSrcLabel(s: String): String = when (s) {
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun TodoDetailPage(
     t: Todo,
     onBack: () -> Unit,
