@@ -17,14 +17,20 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -77,6 +83,8 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
     var view by remember { mutableStateOf("timeline") }
     var deleteTarget by remember { mutableStateOf<Todo?>(null) }
     var clearDoneOpen by remember { mutableStateOf(false) }
+    // vc122 详情页：点时间轴/已完成条目整页打开（全文可复制+来源日期+提醒调整）
+    var detailId by remember { mutableStateOf<String?>(null) }
 
     fun reload() {
         // 2026-09-15 治「返回笔记页卡死」：本页动作只局部读盘，不调 vm.refresh()
@@ -183,6 +191,8 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
             (rows.filter { !it.isPending && it.score != Long.MAX_VALUE && it.score < ms })
     }
 
+    // vc122 详情页：盖在整页之上（点时间轴/已完成条目进来）
+    Box(Modifier.fillMaxSize()) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -283,6 +293,7 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(14.dp))
+                                    .clickable { detailId = t.id }
                                     .padding(horizontal = 12.dp, vertical = 9.dp)
                             ) {
                                 Box(
@@ -308,6 +319,7 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
                         TRow(it.key, it.text, it.who, it.score, it.dueLabel, it.origin, it.isPending)
                     },
                     now = now,
+                    onOpen = { key -> if (key.startsWith("msg_")) detailId = key.removePrefix("msg_") },
                     onToggle = { key ->
                         if (key.startsWith("msg_")) {
                             msgTodos.firstOrNull { it.id == key.removePrefix("msg_") }?.let { toggleMsg(it) }
@@ -361,6 +373,31 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
             dismissButton = { TextButton(onClick = { clearDoneOpen = false }) { Text("取消") } }
         )
     }
+
+    // ---------- vc122：待办详情页（路河：文字要能复制，来源日期要看得到，提醒别一刀切） ----------
+    val detailTodo = detailId?.let { id -> msgTodos.firstOrNull { it.id == id } }
+    if (detailTodo != null) {
+        val t = detailTodo
+        TodoDetailPage(
+            t = t,
+            onBack = { detailId = null },
+            onToggleDone = { toggleMsg(t) },
+            onDelete = {
+                deleteMsg(t)
+                detailId = null
+            },
+            onReminder = { iso ->
+                try {
+                    TodoStore.updateReminder(context, t.id, iso)
+                    // 改完立即重挂闹钟（否则要等下次 App 打开才生效）
+                    com.luyuan.platform.ReminderScheduler.rescheduleAll(context)
+                } catch (_: Exception) {
+                }
+                reload()
+            }
+        )
+    }
+    } // Box vc122
 }
 
 // ---------- vc98：时间轴小页（路河拍板「截止日期单开一个小页做类似时间轴」） ----------
@@ -388,7 +425,7 @@ private fun SegChip(label: String, active: Boolean, onClick: () -> Unit) {
 
 /** 时间轴主视图：未办按截止日分桶（逾期→今天→明天→后天→M/d→无期限），桶头=轴点+日期线 */
 @Composable
-private fun TimelineView(trows: List<TRow>, now: LocalDateTime, onToggle: (String) -> Unit) {
+private fun TimelineView(trows: List<TRow>, now: LocalDateTime, onToggle: (String) -> Unit, onOpen: (String) -> Unit = {}) {
     val buckets = remember(trows, now) {
         val today = now.toLocalDate()
         val out = linkedMapOf<String, MutableList<TRow>>()
@@ -452,16 +489,16 @@ private fun TimelineView(trows: List<TRow>, now: LocalDateTime, onToggle: (Strin
             }
             for (r in items) {
                 item(key = "tl_${r.key}") {
-                    TimelineRow(r, onToggle)
+                    TimelineRow(r, onToggle, onOpen)
                 }
             }
         }
     }
 }
 
-/** 时间轴单行：左侧时刻、中间轴点、右侧内容卡（待确认=琥珀点无勾选；正式=可勾） */
+/** 时间轴单行：左侧时刻、中间轴点、右侧内容卡（待确认=琥珀点无勾选；正式=可勾）；点卡片开详情（vc122） */
 @Composable
-private fun TimelineRow(r: TRow, onToggle: (String) -> Unit) {
+private fun TimelineRow(r: TRow, onToggle: (String) -> Unit, onOpen: (String) -> Unit = {}) {
     val time = if (r.score == Long.MAX_VALUE) "—"
     else {
         val d = java.time.Instant.ofEpochMilli(r.score)
@@ -497,7 +534,11 @@ private fun TimelineRow(r: TRow, onToggle: (String) -> Unit) {
             }
         }
         Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f)) {
+        Column(
+            Modifier
+                .weight(1f)
+                .clickable { if (r.key.startsWith("msg_")) onOpen(r.key) }
+        ) {
             Text(
                 r.text, fontSize = 12.5.sp, color = LuyuanColors.Ink1,
                 maxLines = 2, overflow = TextOverflow.Ellipsis
@@ -608,5 +649,194 @@ private fun ExpiredSection(
                 }
             }
         }
+    }
+}
+
+// ---------- vc122：待办详情页（路河 10-11：文字要能复制、来源日期要看得到、提醒别一刀切） ----------
+
+/** ISO8601（带/不带时区）容错解析（展示用）；解析不出返回 null */
+private fun todoIso(s: String): java.time.OffsetDateTime? = try {
+    java.time.OffsetDateTime.parse(s)
+} catch (_: Throwable) {
+    try {
+        LocalDateTime.parse(s).atOffset(java.time.OffsetDateTime.now().offset)
+    } catch (_: Throwable) {
+        null
+    }
+}
+
+private fun todoFmt(o: java.time.OffsetDateTime?): String {
+    if (o == null) return ""
+    val d = o.toLocalDateTime()
+    return "${d.monthValue}/${d.dayOfMonth} " + String.format("%02d:%02d", d.hour, d.minute)
+}
+
+private fun todoSrcLabel(s: String): String = when (s) {
+    "wechat" -> "微信"
+    "qq" -> "QQ"
+    "photo" -> "课堂照片"
+    "manual" -> "手动"
+    else -> s.ifBlank { "未知" }
+}
+
+@Composable
+private fun TodoDetailPage(
+    t: Todo,
+    onBack: () -> Unit,
+    onToggleDone: () -> Unit,
+    onDelete: () -> Unit,
+    onReminder: (String?) -> Unit
+) {
+    var confirmDelete by remember { mutableStateOf(false) }
+    val due = todoIso(t.due_at)
+    val remind = t.remind_at?.let { todoIso(it) }
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                ),
+                title = { Text("待办详情", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    }
+                }
+            )
+        }
+    ) { pad ->
+        Column(
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(pad)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp)
+        ) {
+            Spacer(Modifier.height(4.dp))
+
+            // 全文（可长按复制）
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                SelectionContainer {
+                    Text(
+                        t.text, fontSize = 15.sp, lineHeight = 23.sp, color = LuyuanColors.Ink1,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    )
+                }
+            }
+
+            // 来源与时间
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(7.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp)
+                ) {
+                    val who = t.who.ifBlank { t.sender }
+                    val srcLine = todoSrcLabel(t.source) + if (who.isNotBlank()) " · $who" else ""
+                    DetailInfoRow("来源", srcLine)
+                    DetailInfoRow("收录", todoIso(t.created_at)?.let { todoFmt(it) } ?: t.created_at.take(16))
+                    DetailInfoRow("截止", due?.let { (t.when_text.takeIf { w -> w.isNotBlank() }?.let { w -> "$w · " } ?: "") + todoFmt(it) } ?: "无限期")
+                    DetailInfoRow("提醒", remind?.let { todoFmt(it) } ?: "未设")
+                }
+            }
+
+            // 提醒调整（vc122：一刀切 1 小时不合理，路河自选提前量）
+            if (due != null) {
+                Text("提醒时间", fontWeight = FontWeight.Bold, fontSize = 12.5.sp, color = LuyuanColors.Ink2)
+                val options: List<Pair<Long?, String>> = listOf(
+                    null to "不提醒",
+                    15L to "提前15分",
+                    30L to "提前30分",
+                    60L to "提前1小时",
+                    120L to "提前2小时",
+                    1440L to "提前1天"
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    modifier = Modifier.horizontalScroll(rememberScrollState())
+                ) {
+                    for ((mins, label) in options) {
+                        val target = mins?.let { due.minusSeconds(it * 60) }
+                        val active = if (mins == null) remind == null
+                        else remind != null && target != null &&
+                            kotlin.math.abs(java.time.Duration.between(remind, target).seconds) < 90
+                        SegChip(label, active) {
+                            onReminder(
+                                mins?.let { due.minusSeconds(it * 60).format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME) }
+                            )
+                        }
+                    }
+                }
+            } else {
+                Text(
+                    "无限期待办：不会自动提醒（没有截止时间可倒推）。需要闹钟的话给这条补个截止说法，比如「明天 20:00 前」。", fontSize = 11.sp, color = LuyuanColors.Ink4, lineHeight = 15.sp
+                )
+            }
+
+            // 原文（可复制；照片待办=OCR 全文，消息待办=消息原文）
+            if (t.raw.isNotBlank()) {
+                Text("原文", fontWeight = FontWeight.Bold, fontSize = 12.5.sp, color = LuyuanColors.Ink2)
+                Card(
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    SelectionContainer {
+                        Text(
+                            t.raw, fontSize = 12.sp, lineHeight = 18.sp, color = LuyuanColors.Ink3,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(2.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                Text(
+                    if (t.done) "标为未办" else "标为已完成",
+                    fontSize = 13.sp, fontWeight = FontWeight.Bold, color = LuyuanColors.Green700,
+                    modifier = Modifier.clickable(onClick = onToggleDone).padding(vertical = 6.dp)
+                )
+                Text(
+                    "删除", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = LuyuanColors.Red,
+                    modifier = Modifier.clickable { confirmDelete = true }.padding(vertical = 6.dp)
+                )
+            }
+            Spacer(Modifier.height(28.dp))
+        }
+    }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("删除这条待办？", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+            text = { Text("手机与电脑端同步消失。", fontSize = 13.sp) },
+            confirmButton = {
+                TextButton(onClick = { confirmDelete = false; onDelete() }) {
+                    Text("删除", color = LuyuanColors.Red, fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("取消") } }
+        )
+    }
+}
+
+@Composable
+private fun DetailInfoRow(label: String, value: String) {
+    Row {
+        Text(label, fontSize = 11.sp, color = LuyuanColors.Ink4, modifier = Modifier.width(38.dp))
+        Text(value, fontSize = 11.5.sp, color = LuyuanColors.Ink2, fontWeight = FontWeight.Medium)
     }
 }

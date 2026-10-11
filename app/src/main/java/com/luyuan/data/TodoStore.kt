@@ -151,19 +151,42 @@ object TodoStore {
 
     /**
      * vc113：按 due_at 算自动提醒时刻 = 截止前 1 小时（截止早于当下或已过则不设）。
+     * vc122 兜底修（路河 10-11 报"提醒没生效"实锤 todo_40e989d5：19:10 排练 18:29 收录，
+     * 1 小时提前期已过 → 旧逻辑直接不设 → 整场静音）：收录时提前期已过但截止未到 →
+     * 改设 截止前 10 分钟 与 收录+2分钟 里还能用的那个，不再整场静音。
      * 只填 remind_at 字段；调度由 ReminderScheduler.rescheduleAll 统一接管（App 打开/开机/响后重排）。
      */
     private fun autoReminder(t: Todo): Todo {
         if (t.remind_at != null || t.due_at.isBlank()) return t
         return try {
             val due = java.time.OffsetDateTime.parse(t.due_at)
-            val remind = due.minusHours(1)
-            if (remind.isAfter(java.time.OffsetDateTime.now())) {
+            val now = java.time.OffsetDateTime.now()
+            var remind = due.minusHours(1)
+            if (!remind.isAfter(now)) {
+                remind = maxOf(now.plusMinutes(2), due.minusMinutes(10))
+            }
+            if (remind.isAfter(now) && remind.isBefore(due)) {
                 t.copy(remind_at = remind.format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME))
             } else t
         } catch (_: Throwable) {
             t
         }
+    }
+
+    /**
+     * vc122 详情页提醒调整（路河：一刀切 1 小时不合理——近的活动不用提前 1 小时）。
+     * remindAtIso=null=关提醒；非 null=绝对时刻。fresh 读盘只改 remind_at/reminded，
+     * 同步纪律同 setDone；调度由调用方随后 ReminderScheduler.rescheduleAll 重挂。
+     */
+    fun updateReminder(context: Context, id: String, remindAtIso: String?): Boolean {
+        val disk = readFresh(context, id) ?: return false
+        return write(
+            context, disk.copy(
+                remind_at = remindAtIso,
+                reminded = if (remindAtIso == null) disk.reminded else false,
+                updated_at = PendingMessageTodoStore.nowIso()
+            )
+        )
     }
 
     private fun textOf(s: String): String = s.replace("\\s+".toRegex(), "")

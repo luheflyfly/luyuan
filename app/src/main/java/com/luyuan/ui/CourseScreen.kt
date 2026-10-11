@@ -28,6 +28,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -1432,10 +1433,12 @@ private fun PhotoTodoSeg() {
                         Text("待办已生成，在下方清单/待办页都能看到", fontSize = 11.sp, color = LuyuanColors.Green700)
                     }
                     Spacer(Modifier.height(8.dp))
-                    Text(
-                        if (r.ocrFull.isBlank()) "（这张照片没认出文字）" else r.ocrFull,
-                        fontSize = 12.sp, lineHeight = 17.sp
-                    )
+                    SelectionContainer {
+                        Text(
+                            if (r.ocrFull.isBlank()) "（这张照片没认出文字）" else r.ocrFull,
+                            fontSize = 12.sp, lineHeight = 17.sp
+                        )
+                    }
                 }
             }
         )
