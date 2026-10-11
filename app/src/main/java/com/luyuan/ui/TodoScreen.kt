@@ -57,6 +57,7 @@ import com.luyuan.data.MessageSettings
 import com.luyuan.data.PendingMessageTodo
 import com.luyuan.data.Todo
 import com.luyuan.data.TodoStore
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -76,7 +77,9 @@ import java.time.format.DateTimeFormatter
 fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = false) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val contacts by vm.contacts.collectAsStateWithLifecycle()
-    var msgTodos by remember { mutableStateOf(TodoStore.list(context)) }
+    // vc123 治切页卡顿：初始值改空、读盘挪 IO 线程。原写法 remember { TodoStore.list(context) }
+    // 在组合期同步扫同步根目录（FUSE 慢盘），页面首次组装直接堵在主线程。
+    var msgTodos by remember { mutableStateOf(emptyList<Todo>()) }
     var excluded by remember { mutableStateOf(MessageSettings.excludedContacts(context)) }
     // vc113 路河拍板改版：列表退役，进页即时间轴——他只看今天要做什么；已逾期/已完成各一页。
     // 待确认视角摘掉（vc108 起全量直收，队列只剩历史存量；存量靠长按/通知键处理）
@@ -86,11 +89,18 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
     // vc122 详情页：点时间轴/已完成条目整页打开（全文可复制+来源日期+提醒调整）
     var detailId by remember { mutableStateOf<String?>(null) }
 
+    // vc123：读盘统一挂 IO 线程（本页常驻 Pager，30s 轮询原本一直在主线程扫根目录，切页撞上就卡）
+    val reloadScope = androidx.compose.runtime.rememberCoroutineScope()
     fun reload() {
         // 2026-09-15 治「返回笔记页卡死」：本页动作只局部读盘，不调 vm.refresh()
-        msgTodos = TodoStore.list(context)
-        excluded = MessageSettings.excludedContacts(context)
-        // vc98：进页补抽满窗缓冲——进程被杀后监听器定时器丢了，靠这条把攒着的消息抽掉
+        reloadScope.launch {
+            val todos = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { TodoStore.list(context) }.getOrDefault(emptyList())
+            }
+            msgTodos = todos
+            excluded = MessageSettings.excludedContacts(context)
+        }        // vc98：进页补抽满窗缓冲——进程被杀后监听器定时器丢了，靠这条把攒着的消息抽掉
+        //（vc123 起 flushDueNow 内部已整体在后台线程跑，主线程零读盘）
         com.luyuan.platform.MessageNotificationListener.flushDueNow(context)
     }
     androidx.compose.runtime.LaunchedEffect(Unit) { reload() }

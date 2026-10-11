@@ -2,8 +2,6 @@ package com.luyuan.platform
 
 import android.app.Notification
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import com.luyuan.data.BufferedMessage
@@ -76,12 +74,24 @@ class MessageNotificationListener : NotificationListenerService() {
             if (isDuplicate(title, body)) return
 
             // vc120 关键词打标：用户关注词命中即带标记进缓冲（冲刷时零任务则兜底落待办）
-            val kwHit = try { MessageKeywordRules.hit(this, body) } catch (_: Throwable) { false }
-            MessageBuffer.append(
-                this,
-                BufferedMessage(chat = title, sender = sender, body = body, at = System.currentTimeMillis(), kw = kwHit)
-            )
-            scheduleFlush()
+            // vc120 关键词打标：用户关注词命中即带标记进缓冲（冲刷时该聊天零任务则兜底落待办）
+            // vc123 治整机卡顿：从关键词命中起全部挪后台线程——本回调在主线程上，
+            // 原来 MessageBuffer.append/list（读+写整个缓冲文件）跟着每条微信/QQ 通知跑在主线程。
+            val chat = title
+            val msgSender = sender
+            val msgBody = body
+            val service = this
+            flushExecutor.execute {
+                try {
+                    val kwHit = try { MessageKeywordRules.hit(service, msgBody) } catch (_: Throwable) { false }
+                    MessageBuffer.append(
+                        service,
+                        BufferedMessage(chat = chat, sender = msgSender, body = msgBody, at = System.currentTimeMillis(), kw = kwHit)
+                    )
+                    scheduleFlushAsync(service)
+                } catch (_: Throwable) {
+                }
+            }
         } catch (_: Throwable) {
             // 通知解析永不干扰系统
         }
@@ -93,19 +103,9 @@ class MessageNotificationListener : NotificationListenerService() {
         return m.groupValues[1].trim() to m.groupValues[2].trim()
     }
 
-    /** 排一个最近的冲刷时点：整批最早消息满窗时触发；有聊天积满 EARLY_COUNT 条则 2 秒内就来 */
-    private fun scheduleFlush() {
-        val msgs = MessageBuffer.list(this)
-        if (msgs.isEmpty()) return
-        val oldest = msgs.minOf { it.at }
-        val full = msgs.groupingBy { it.chat }.eachCount().any { it.value >= MessageBuffer.EARLY_COUNT }
-        // vc120：带关键词命中的缓冲 2 秒内就冲（关注的事不干等满窗）
-        val kwHot = msgs.any { it.kw }
-        val delay = if (full || kwHot) 2_000L
-        else maxOf(2_000L, MessageBuffer.WINDOW_MS - (System.currentTimeMillis() - oldest))
-        flushHandler.removeCallbacks(flushRunnable)
-        flushHandler.postDelayed(flushRunnable, delay)
-    }
+    /** 排一个最近的冲刷时点：整批最早消息满窗时触发；有聊天积满 EARLY_COUNT 条则 2 秒内就来。
+     *  vc123：读盘与计算挪 flushExecutor（串行，天然与冲刷互斥），主线程只负责挂定时器。 */
+    private fun scheduleFlush() = scheduleFlushAsync(this)
 
     override fun onListenerConnected() {
         super.onListenerConnected()
@@ -117,17 +117,10 @@ class MessageNotificationListener : NotificationListenerService() {
         }
     }
 
-    private val flushRunnable = Runnable {
-        if (MessageBuffer.due(this) || MessageBuffer.anyChatFull(this)) {
-            flushNow(this)
-        } else {
-            scheduleFlush()   // 进程醒着但窗还没满，续约下一次
-        }
-    }
-
     override fun onDestroy() {
+        // vc123：定时器已搬后台调度器，这里只需取消未到点的冲刷
         try {
-            flushHandler.removeCallbacksAndMessages(null)
+            pendingFlush?.cancel(false)
         } catch (_: Throwable) {
         }
         super.onDestroy()
@@ -170,9 +163,49 @@ class MessageNotificationListener : NotificationListenerService() {
         /** 群聊特征：body 形如「昵称: 内容」/「昵称：内容」；两个捕获组 = 昵称、正文 */
         private val RX_GROUP_PREFIX = Regex("^\\s*([^\\s：:]{1,20})\\s*[：:]\\s*(\\S.*)$")
 
-        /** 单线程串行执行：天然避免并发重复抽取同一个窗口 */
+        /** 单线程串行执行：天然避免并发重复抽取同一个窗口；vc123 起缓冲读写/调度计算也全在这一条线程 */
         private val flushExecutor = Executors.newSingleThreadExecutor()
-        private val flushHandler = Handler(Looper.getMainLooper())
+
+        /** vc123：冲刷定时搬离主线程 Handler——后台算时点，这里只管到点把判定任务丢回 flushExecutor */
+        private val flushScheduler = Executors.newSingleThreadScheduledExecutor()
+
+        @Volatile
+        private var pendingFlush: java.util.concurrent.ScheduledFuture<*>? = null
+
+        /** vc123：后台读缓冲算冲刷时点并挂调度（此前整套跑在主线程，且旧 Handler.removeCallbacks
+         *  对每次新建的 Runnable 实例无效，定时器会越积越多）。全程不碰主线程。 */
+        private fun scheduleFlushAsync(ctx: Context) {
+            flushExecutor.execute {
+                try {
+                    val msgs = MessageBuffer.list(ctx)
+                    if (msgs.isEmpty()) return@execute
+                    val oldest = msgs.minOf { it.at }
+                    val full = msgs.groupingBy { it.chat }.eachCount().any { it.value >= MessageBuffer.EARLY_COUNT }
+                    // vc120：带关键词命中的缓冲 2 秒内就冲（关注的事不干等满窗）
+                    val kwHot = msgs.any { it.kw }
+                    val delay = if (full || kwHot) 2_000L
+                    else maxOf(2_000L, MessageBuffer.WINDOW_MS - (System.currentTimeMillis() - oldest))
+                    pendingFlush?.cancel(false)
+                    pendingFlush = flushScheduler.schedule(
+                        { flushExecutor.execute { runFlushDecision(ctx) } },
+                        delay, java.util.concurrent.TimeUnit.MILLISECONDS
+                    )
+                } catch (_: Throwable) {
+                }
+            }
+        }
+
+        /** 判定+冲刷/续约（在 flushExecutor 上执行） */
+        private fun runFlushDecision(ctx: Context) {
+            try {
+                if (MessageBuffer.due(ctx) || MessageBuffer.anyChatFull(ctx)) {
+                    flushNow(ctx)
+                } else {
+                    scheduleFlushAsync(ctx)   // 窗还没满，续约下一次
+                }
+            } catch (_: Throwable) {
+            }
+        }
 
         /**
          * 窗口冲刷：缓冲整体取走 → 按聊天分组 → 每聊天一次云端抽取 → 任务落待确认 + 通知。
@@ -238,11 +271,14 @@ class MessageNotificationListener : NotificationListenerService() {
             }
         }
 
-        /** App 内补抽入口（vc98）：打开待办页时调用——进程被杀后定时器丢失，靠这条兜底把满窗缓冲抽掉。 */
+        /** App 内补抽入口（vc98）：打开待办页时调用——进程被杀后定时器丢失，靠这条兜底把满窗缓冲抽掉。
+         *  vc123：判定读盘挪 flushExecutor，调用方（待办页 reload）不再在主线程读缓冲。 */
         fun flushDueNow(ctx: Context) {
-            try {
-                if (MessageBuffer.due(ctx) || MessageBuffer.anyChatFull(ctx)) flushNow(ctx)
-            } catch (_: Throwable) {
+            flushExecutor.execute {
+                try {
+                    if (MessageBuffer.due(ctx) || MessageBuffer.anyChatFull(ctx)) flushNow(ctx)
+                } catch (_: Throwable) {
+                }
             }
         }
 

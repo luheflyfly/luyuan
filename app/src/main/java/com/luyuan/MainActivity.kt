@@ -92,6 +92,8 @@ import com.luyuan.ui.TodoScreen
 import com.luyuan.ui.AskKeyScreen
 import com.luyuan.ui.TerminalCapsule
 import com.luyuan.ui.TrashScreen
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.snapshotFlow
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -167,14 +169,18 @@ fun AppRoot(startDest: String) {
     val visibleSlots = androidx.compose.runtime.remember(currentRoute, navVersion) {
         com.luyuan.data.BottomNavPrefs.visibleSlots(context0)
     }
-    val tabs = listOf(
-        Triple(0, "笔记", Icons.AutoMirrored.Filled.Notes),
-        Triple(5, "待办", Icons.Default.TaskAlt),
-        Triple(3, "日记", Icons.Default.EditNote),
-        Triple(1, "记账", Icons.Default.Payments),
-        Triple(2, "学业", Icons.Default.School),
-        Triple(4, "人脉", Icons.Default.People)
-    ).filter { it.first in visibleSlots }
+    // vc123 治切页卡顿：tabs 必须 remember。原写法每次重组都新建列表 → Pager 内容 lambda 实例
+    // 每次都变 → 任何一个 AppRoot 级重组（键盘/搜索词/胶囊展开…）都会把六个页面全部重新执行。
+    val tabs = androidx.compose.runtime.remember(visibleSlots) {
+        listOf(
+            Triple(0, "笔记", Icons.AutoMirrored.Filled.Notes),
+            Triple(5, "待办", Icons.Default.TaskAlt),
+            Triple(3, "日记", Icons.Default.EditNote),
+            Triple(1, "记账", Icons.Default.Payments),
+            Triple(2, "学业", Icons.Default.School),
+            Triple(4, "人脉", Icons.Default.People)
+        ).filter { it.first in visibleSlots }
+    }
     // pageCount 走状态而不是直接捕列表：底栏偏好变化导致页数增减时 Pager 实时取新值
     val pagerPageCount = androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(tabs.size) }
     pagerPageCount.intValue = tabs.size
@@ -342,10 +348,16 @@ fun AppRoot(startDest: String) {
 
     // 待办红点（vc79 挂底栏「待办」钮；vc115 改数未办待办——原数待确认存量，vc108 退役后无 UI 出口，数字永不归零）
     var pendingTodoCount by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
-    androidx.compose.runtime.LaunchedEffect(pagerState.currentPage) {
-        // vc89：统计挪 IO 线程——此前在主线程扫盘，每次切页卡一下（路河「切页按钮闪烁」）
-        pendingTodoCount = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            runCatching { com.luyuan.data.TodoStore.list(ctx).count { !it.done } }.getOrDefault(0)
+    // vc123 治切页卡顿：页码读取移出组合（snapshotFlow）。
+    // 原写法 LaunchedEffect(pagerState.currentPage) 把 currentPage 读进了 AppRoot 的组合作用域——
+    // 每次切页都整个 AppRoot 重组，六个常驻页面全部重新执行（vc89 红点统计引入的隐性代价）。
+    // 官方口径：副作用的键不要读会变的状态，改用 snapshotFlow 在协程里订阅。
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        snapshotFlow { pagerState.currentPage }.collect {
+            // vc89：统计挪 IO 线程——此前在主线程扫盘，每次切页卡一下（路河「切页按钮闪烁」）
+            pendingTodoCount = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { com.luyuan.data.TodoStore.list(ctx).count { !it.done } }.getOrDefault(0)
+            }
         }
     }
     androidx.compose.runtime.LaunchedEffect(Unit) {

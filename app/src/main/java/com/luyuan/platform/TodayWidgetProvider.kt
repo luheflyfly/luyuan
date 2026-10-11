@@ -27,21 +27,33 @@ import java.util.Locale
  */
 class TodayWidgetProvider : AppWidgetProvider() {
 
+    // vc123 治整机卡顿：渲染涉及全仓库读盘（课务/人脉/账目/待办/笔记递归扫描），此前跑在
+    // 广播回调的主线程上——App 进程与 UI 同进程，每次刷新都直接卡 UI 一拍。
+    // 官方口径：receiver 回调里的重活 goAsync() + 后台线程，收尾必须 pendingResult.finish()。
+    // 线程池放 companion：系统每次广播都新建 receiver 实例，实例属性会开出一堆线程。
+
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
-        // 一次性清理：旧版把 widget 日志写进了同步根目录（引发刷新风暴），搬缓存后清掉遗留，
-        // 免得 Syncthing 继续来回同步这两个文件。删的只是本 App 自己生成的调试日志，安全可逆（重装即重现）。
-        try {
-            for (n in listOf("widget_log.txt", "widget_err.txt")) {
-                val legacy = java.io.File(StorageLocator.getRoot(context), n)
-                if (legacy.exists()) legacy.delete()
+        val result = goAsync()
+        renderExecutor.execute {
+            try {
+                // 一次性清理：旧版把 widget 日志写进了同步根目录（引发刷新风暴），搬缓存后清掉遗留，
+                // 免得 Syncthing 继续来回同步这两个文件。删的只是本 App 自己生成的调试日志，安全可逆（重装即重现）。
+                try {
+                    for (n in listOf("widget_log.txt", "widget_err.txt")) {
+                        val legacy = java.io.File(StorageLocator.getRoot(context), n)
+                        if (legacy.exists()) legacy.delete()
+                    }
+                } catch (_: Throwable) {
+                }
+                logWidget(context, "onUpdate ids=${ids.size} (首次加桌/系统周期刷新都会走这里)")
+                for (id in ids) {
+                    // 先推极简卡：vivo/OriginOS 加桌瞬间只画系统占位圈，首帧不到就一直停在圈上
+                    pushInitial(context, manager, id)
+                    renderSafe(context, manager, id)
+                }
+            } finally {
+                result.finish()
             }
-        } catch (_: Throwable) {
-        }
-        logWidget(context, "onUpdate ids=${ids.size} (首次加桌/系统周期刷新都会走这里)")
-        for (id in ids) {
-            // 先推极简卡：vivo/OriginOS 加桌瞬间只画系统占位圈，首帧不到就一直停在圈上
-            pushInitial(context, manager, id)
-            renderSafe(context, manager, id)
         }
     }
 
@@ -61,17 +73,31 @@ class TodayWidgetProvider : AppWidgetProvider() {
     override fun onAppWidgetOptionsChanged(
         context: Context, manager: AppWidgetManager, appWidgetId: Int, newOptions: Bundle
     ) {
-        logWidget(context, "onAppWidgetOptionsChanged id=$appWidgetId")
-        renderSafe(context, manager, appWidgetId)
+        val result = goAsync()
+        renderExecutor.execute {
+            try {
+                logWidget(context, "onAppWidgetOptionsChanged id=$appWidgetId")
+                renderSafe(context, manager, appWidgetId)
+            } finally {
+                result.finish()
+            }
+        }
     }
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
         if (intent.action == ACTION_REFRESH) {
-            logWidget(context, "onReceive ACTION_REFRESH")
-            val mgr = AppWidgetManager.getInstance(context)
-            val ids = mgr.getAppWidgetIds(ComponentName(context, TodayWidgetProvider::class.java))
-            for (id in ids) renderSafe(context, mgr, id)
+            val result = goAsync()
+            renderExecutor.execute {
+                try {
+                    logWidget(context, "onReceive ACTION_REFRESH")
+                    val mgr = AppWidgetManager.getInstance(context)
+                    val ids = mgr.getAppWidgetIds(ComponentName(context, TodayWidgetProvider::class.java))
+                    for (id in ids) renderSafe(context, mgr, id)
+                } finally {
+                    result.finish()
+                }
+            }
         }
     }
 
@@ -395,5 +421,8 @@ class TodayWidgetProvider : AppWidgetProvider() {
 
         /** 「最近 3 条」的显示门槛：minHeight ≥ 该值（dp）才展开。4×3 通常 ~180dp，4×2 ~110dp */
         private const val RECENT_HEIGHT_THRESHOLD = 150
+
+        /** vc123：渲染专用后台线程（单线程串行，广播乱序到达也按序渲染，不重不漏） */
+        private val renderExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
     }
 }
