@@ -479,25 +479,8 @@ fun LazyListScope.keiwuCsuItems(
         ) {
             val names = listOf("奖学金", "竞赛库", "综测加分", "推免时间线")
             for ((i, n) in names.withIndex()) {
-                val on = sub == i
-                Text(
-                    n,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (on) Color.White else LuyuanColors.Ink2,
-                    modifier = Modifier
-                        .background(
-                            if (on) LuyuanColors.Green700 else MaterialTheme.colorScheme.surface,
-                            RoundedCornerShape(999.dp)
-                        )
-                        .border(
-                            1.dp,
-                            if (on) LuyuanColors.Green700 else MaterialTheme.colorScheme.outline,
-                            RoundedCornerShape(999.dp)
-                        )
-                        .clickable { onSub(i) }
-                        .padding(horizontal = 13.dp, vertical = 6.dp)
-                )
+                // vc124 视觉对齐：迁入 LuyuanSeg 单源规格
+                LuyuanSeg(n, active = sub == i) { onSub(i) }
             }
         }
     }

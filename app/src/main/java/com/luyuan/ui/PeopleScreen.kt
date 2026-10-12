@@ -392,28 +392,9 @@ private fun PeopleContactCard(c: Contact, showSidBadge: Boolean, onClick: () -> 
     }
 }
 
-/** 分组 chip（B4）：纸白底圆角胶囊，选中变绿底绿字（沿用设置页目录卡的同款语言） */
+/** 分组 chip（B4）：vc124 视觉对齐——迁入 LuyuanSeg 单源规格 */
 @Composable
-private fun GroupChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    Text(
-        label,
-        fontSize = 12.sp,
-        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-        color = if (selected) MaterialTheme.colorScheme.primary else LuyuanColors.Ink2,
-        modifier = Modifier
-            .background(
-                if (selected) LuyuanColors.Green50 else MaterialTheme.colorScheme.surface,
-                RoundedCornerShape(999.dp)
-            )
-            .border(
-                1.dp,
-                if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                RoundedCornerShape(999.dp)
-            )
-            .clickable { onClick() }
-            .padding(horizontal = 12.dp, vertical = 5.dp)
-    )
-}
+private fun GroupChip(label: String, selected: Boolean, onClick: () -> Unit) = LuyuanSeg(label, selected, onClick)
 
 @Composable
 private fun ContactDetailDialog(

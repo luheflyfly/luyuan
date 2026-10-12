@@ -254,17 +254,7 @@ fun RecordScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
 }
 
 @Composable
-private fun ModeChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    Button(
-        onClick = onClick,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.primary
-            else MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = if (selected) MaterialTheme.colorScheme.onPrimary
-            else MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    ) { Text(label) }
-}
+private fun ModeChip(label: String, selected: Boolean, onClick: () -> Unit) = LuyuanSeg(label, selected, onClick)
 
 /** vc110 P5：实时波形——右端最新，暂停时不再来新条自然冻结；振幅×2.5 提小声可见度 */
 @Composable

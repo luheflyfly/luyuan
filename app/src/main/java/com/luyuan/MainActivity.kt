@@ -471,12 +471,14 @@ fun AppRoot(startDest: String) {
                             )
                             1 -> LedgerScreen(
                                 vm = vm,
-                                onAsk = { nav.navigate("ask") },
+                                // vc124 层级修：问路远统一走左侧抽屉（原在此推整页，与笔记/胶囊的抽屉形态并存两套）
+                                onAsk = { showAsk = true },
                                 onTrash = { nav.navigate("trash") }
                             )
                             2 -> CourseScreen(
                                 vm = vm,
-                                onAsk = { nav.navigate("ask") },
+                                // vc124 层级修：同上，统一抽屉
+                                onAsk = { showAsk = true },
                                 onTrash = { nav.navigate("trash") },
                                 onDetail = { nav.navigate("detail/$it") } // B5：作业清单点进笔记详情
                             )
@@ -503,11 +505,9 @@ fun AppRoot(startDest: String) {
                     AskKeyScreen(
                         vm = vm,
                         onBack = { nav.popBackStack() },
-                        onAsk = { nav.navigate("ask") }
+                        // vc124 层级修：回主页开抽屉（原推 ask 整页，路由已摘）
+                        onAsk = { nav.popBackStack(); showAsk = true }
                     )
-                }
-                composable("ask") {
-                    com.luyuan.ui.AskScreen(vm = vm, onBack = { nav.popBackStack() })
                 }
                 composable("trash") {
                     TrashScreen(vm = vm, onBack = { nav.popBackStack() })

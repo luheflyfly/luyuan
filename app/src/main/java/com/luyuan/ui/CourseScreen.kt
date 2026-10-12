@@ -950,25 +950,8 @@ private fun SegTabs(seg: Int, onSeg: (Int) -> Unit) {
     ) {
         val names = listOf("课表", "日程", "成绩", "速查", "待办")
         for ((i, n) in names.withIndex()) {
-            val on = seg == i
-            Text(
-                n,
-                fontSize = 12.5.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (on) Color.White else LuyuanColors.Ink2,
-                modifier = Modifier
-                    .background(
-                        if (on) LuyuanColors.Green700 else MaterialTheme.colorScheme.surface,
-                        RoundedCornerShape(999.dp)
-                    )
-                    .border(
-                        1.dp,
-                        if (on) LuyuanColors.Green700 else MaterialTheme.colorScheme.outline,
-                        RoundedCornerShape(999.dp)
-                    )
-                    .clickable { onSeg(i) }
-                    .padding(horizontal = 15.dp, vertical = 7.dp)
-            )
+            // vc124 视觉对齐：迁入 LuyuanSeg 单源规格
+            LuyuanSeg(n, active = seg == i) { onSeg(i) }
         }
     }
 }

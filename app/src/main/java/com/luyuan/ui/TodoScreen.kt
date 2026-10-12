@@ -89,6 +89,9 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
     // vc122 详情页：点时间轴/已完成条目整页打开（全文可复制+来源日期+提醒调整）
     var detailId by remember { mutableStateOf<String?>(null) }
 
+    // vc124 层级修：详情页开着时系统返回=关详情（原样穿层直接退出 App）
+    androidx.activity.compose.BackHandler(enabled = detailId != null) { detailId = null }
+
     // vc123：读盘统一挂 IO 线程（本页常驻 Pager，30s 轮询原本一直在主线程扫根目录，切页撞上就卡）
     val reloadScope = androidx.compose.runtime.rememberCoroutineScope()
     fun reload() {
@@ -421,17 +424,7 @@ private data class TRow(
 
 /** 列表/时间轴切换胶囊（设计 token：选中=Green50 底+Green700 字） */
 @Composable
-private fun SegChip(label: String, active: Boolean, onClick: () -> Unit) {
-    Text(
-        label,
-        fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
-        color = if (active) LuyuanColors.Green700 else LuyuanColors.Ink4,
-        modifier = Modifier
-            .background(if (active) LuyuanColors.Green50 else Color.Transparent, RoundedCornerShape(999.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 5.dp)
-    )
-}
+private fun SegChip(label: String, active: Boolean, onClick: () -> Unit) = LuyuanSeg(label, active, onClick)
 
 /** 时间轴主视图：未办按截止日分桶（逾期→今天→明天→后天→M/d→无期限），桶头=轴点+日期线 */
 @Composable

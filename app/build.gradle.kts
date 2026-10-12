@@ -14,8 +14,8 @@ android {
         // minSdk 24 名义支持两个必崩的 API 版本（真机均为新系统故未炸）；26 = Android 8.0（2017）
         minSdk = 26
         targetSdk = 34
-        versionCode = 123
-        versionName = "1.46.0"
+        versionCode = 124
+        versionName = "1.47.0"
         // 离线识别（sherpa-onnx）jniLib 只带 arm64（用户真机为 arm64，控制 APK 体积）
         ndk {
             abiFilters += "arm64-v8a"

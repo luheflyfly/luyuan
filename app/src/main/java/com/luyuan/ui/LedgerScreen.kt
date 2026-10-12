@@ -220,26 +220,10 @@ fun LedgerScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit) {
             // 月份 chips + 同步小字
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                         for (m in months) {
-                            val selected = m == month
-                            val chipSrc = remember { MutableInteractionSource() }
-                            val chipScale = rememberPressScale(chipSrc)
-                            Text(
-                                "${m.monthValue}月",
-                                fontSize = 13.sp,
-                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                                color = if (selected) Color.White else LuyuanColors.Ink2,
-                                modifier = Modifier
-                                    .clickable(interactionSource = chipSrc, indication = null, onClick = { month = m })
-                                    .background(
-                                        if (selected) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.surface,
-                                        RoundedCornerShape(999.dp)
-                                    )
-                                    .padding(horizontal = 16.dp, vertical = 7.dp)
-                                    .graphicsLayer { scaleX = chipScale; scaleY = chipScale }
-                            )
+                            // vc124 视觉对齐：迁入 LuyuanSeg 单源规格（原 primary 绿与品牌绿深浅不一，一并归一）
+                            LuyuanSeg("${m.monthValue}月", active = m == month) { month = m }
                         }
                     }
                     Spacer(Modifier.weight(1f))

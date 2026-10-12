@@ -16,7 +16,7 @@ import androidx.compose.ui.graphics.Color
 // 手机 UI 方案 A「五键直达」主题（2026-09-08 路河拍板）：
 // PC v20 同款设计 token——纸白 #faf7f0 基底 + 主深绿 #224a3a，旧蓝系全退（施工合同 §三）。
 private val LightColors = lightColorScheme(
-    primary = Color(0xFF224A3A),
+    primary = LuyuanColors.Green700, // vc124 双绿归一（原 #224A3A 与品牌绿 #2D5A48 并存）
     onPrimary = Color.White,
     secondary = Color(0xFF2D5A48),
     onSecondary = Color.White,
