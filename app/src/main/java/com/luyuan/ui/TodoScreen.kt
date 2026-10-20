@@ -52,6 +52,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.luyuan.ui.design.LuyuanPalette
+import com.luyuan.ui.design.LuyuanRadius
+import com.luyuan.ui.design.LuyuanSpace
+import com.luyuan.ui.design.LuyuanTopBar
+import com.luyuan.ui.design.LuyuanType
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.luyuan.data.MessageSettings
 import com.luyuan.data.PendingMessageTodo
@@ -209,27 +214,13 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                ),
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("待办", fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "未办 ${activeRows.size} 件",
-                            fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                navigationIcon = {
-                    if (!embedded) {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                        }
-                    }
-                }
+            // vc127：统一自绘头部。副题把「逾期」也算进未办（旧版只数未逾期，
+            // 3 条逾期 + 2 条今天会显示「未办 2 件」，和底栏红点对不上）。
+            LuyuanTopBar(
+                title = "待办",
+                subtitle = "未办 ${activeRows.size + expiredRows.size} 件" +
+                    if (expiredRows.size > 0) " · 逾期 ${expiredRows.size}" else "",
+                onBack = if (embedded) null else onBack
             )
         }
     ) { pad ->
@@ -450,18 +441,18 @@ private fun TimelineView(trows: List<TRow>, now: LocalDateTime, onToggle: (Strin
         out
     }
     LazyColumn(
-        contentPadding = PaddingValues(bottom = 96.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        contentPadding = PaddingValues(bottom = 104.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 14.dp)
+            .padding(horizontal = LuyuanSpace.gutter)
     ) {
         if (buckets.isEmpty()) {
             item(key = "tl_empty") {
-                Text(
-                    "时间轴空空的。微信/QQ 里的正经事会自动收进来，到点前 1 小时还会提醒你。",
-                    fontSize = 12.sp, color = LuyuanColors.Ink4,
-                    modifier = Modifier.padding(top = 24.dp)
+                EmptyState(
+                    icon = Icons.Default.Check,
+                    title = "时间轴是空的",
+                    subtitle = "微信、QQ 里的正经事会自动收进来，\n也可以在下面胶囊里直接记一条。"
                 )
             }
         }
@@ -470,23 +461,25 @@ private fun TimelineView(trows: List<TRow>, now: LocalDateTime, onToggle: (Strin
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         Modifier
-                            .size(10.dp)
+                            .size(6.dp)
                             .background(
-                                if (label.startsWith("逾期")) LuyuanColors.Red else LuyuanColors.Green700,
+                                if (label.startsWith("逾期")) LuyuanPalette.Red else LuyuanPalette.Green700,
                                 CircleShape
                             )
                     )
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(7.dp))
                     Text(
-                        "$label · ${items.size} 件",
-                        fontWeight = FontWeight.ExtraBold, fontSize = 13.sp, color = LuyuanColors.Ink2
+                        "$label · ${items.size}",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 12.5.sp,
+                        color = if (label.startsWith("逾期")) LuyuanPalette.Red else LuyuanPalette.Ink2
                     )
                     Spacer(Modifier.width(10.dp))
                     Box(
                         Modifier
                             .weight(1f)
                             .height(1.dp)
-                            .background(LuyuanColors.Green100)
+                            .background(LuyuanPalette.Line)
                     )
                 }
             }
@@ -499,9 +492,11 @@ private fun TimelineView(trows: List<TRow>, now: LocalDateTime, onToggle: (Strin
     }
 }
 
-/** 时间轴单行：左侧时刻、中间轴点、右侧内容卡（待确认=琥珀点无勾选；正式=可勾）；点卡片开详情（vc122） */
+/** 时间轴单行（vc127）：时刻 11sp 等宽、44dp 触区里放 22dp 圈、正文 14sp；
+ *  逾期时刻与圈变红。待确认=琥珀点无勾选；只有真正有详情的消息行才挂点击（不再出现"点了没反应"的涟漪）。 */
 @Composable
 private fun TimelineRow(r: TRow, onToggle: (String) -> Unit, onOpen: (String) -> Unit = {}) {
+    val overdue = r.score != Long.MAX_VALUE && r.score < System.currentTimeMillis()
     val time = if (r.score == Long.MAX_VALUE) "—"
     else {
         val d = java.time.Instant.ofEpochMilli(r.score)
@@ -509,52 +504,82 @@ private fun TimelineRow(r: TRow, onToggle: (String) -> Unit, onOpen: (String) ->
         if (r.dueLabel.contains(":")) String.format("%02d:%02d", d.hour, d.minute)
         else "${d.monthValue}/${d.dayOfMonth}"
     }
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Text(
-            time, fontSize = 10.sp, color = LuyuanColors.Ink4,
-            modifier = Modifier.width(36.dp)
+            time,
+            style = LuyuanType.caption.copy(fontFeatureSettings = "tnum"),
+            color = if (overdue) LuyuanPalette.Red else LuyuanPalette.Ink3,
+            modifier = Modifier.width(42.dp)
         )
         if (r.isPending) {
-            Box(
-                Modifier
-                    .padding(horizontal = 7.dp)
-                    .size(8.dp)
-                    .background(LuyuanColors.Amber, CircleShape)
-            )
+            Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
+                Box(
+                    Modifier
+                        .size(8.dp)
+                        .background(LuyuanColors.Amber, CircleShape)
+                )
+            }
         } else {
+            // 视觉 22dp，触区 44dp：拇指按得中，圈还是细的
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .padding(horizontal = 0.dp)
-                    .size(22.dp)
-                    .border(1.6.dp, LuyuanColors.Green700, CircleShape)
+                    .size(44.dp)
                     .clickable { onToggle(r.key) }
             ) {
-                Icon(
-                    Icons.Default.Check, "完成",
-                    tint = LuyuanColors.Green700, modifier = Modifier.size(13.dp)
-                )
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(22.dp)
+                        .border(
+                            1.6.dp,
+                            if (overdue) LuyuanPalette.Red else LuyuanColors.Green700,
+                            CircleShape
+                        )
+                ) {
+                    Icon(
+                        Icons.Default.Check, "完成",
+                        tint = if (overdue) LuyuanPalette.Red else LuyuanColors.Green700,
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
             }
         }
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(2.dp))
         Column(
             Modifier
                 .weight(1f)
-                .clickable { if (r.key.startsWith("msg_")) onOpen(r.key) }
+                .then(
+                    if (r.key.startsWith("msg_")) Modifier.clickable { onOpen(r.key) } else Modifier
+                )
+                .padding(vertical = 9.dp)
         ) {
             Text(
-                r.text, fontSize = 12.5.sp, color = LuyuanColors.Ink1,
-                maxLines = 2, overflow = TextOverflow.Ellipsis
+                r.text,
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+                color = LuyuanPalette.Ink1,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
+            Spacer(Modifier.height(2.dp))
             Text(
                 (r.who + " · " + r.origin).trim(' ', '·'),
-                fontSize = 9.5.sp, color = LuyuanColors.Ink4,
-                maxLines = 1, overflow = TextOverflow.Ellipsis
+                fontSize = 11.sp,
+                color = if (overdue) LuyuanPalette.Red.copy(alpha = 0.75f) else LuyuanPalette.Ink3,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
         if (r.isPending) {
             Text(
-                "待确认", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = LuyuanColors.Amber
+                "待确认",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = LuyuanColors.Amber,
+                modifier = Modifier
+                    .background(LuyuanPalette.AmberBg, LuyuanRadius.pillShape)
+                    .padding(horizontal = 7.dp, vertical = 2.dp)
             )
         }
     }

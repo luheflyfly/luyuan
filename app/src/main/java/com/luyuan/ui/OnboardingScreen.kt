@@ -232,7 +232,7 @@ fun OnboardingScreen(vm: LuyuanViewModel, onDone: () -> Unit) {
                     Text("三招，今天就用上", fontSize = 19.sp, fontWeight = FontWeight.ExtraBold, color = LuyuanColors.Green700)
                     Spacer(Modifier.height(18.dp))
                     Trick(Icons.Default.EditNote, "记一笔", "主页下方胶囊点开，打字回车就是一条笔记")
-                    Trick(Icons.Default.Mic, "说一句", "胶囊的话筒按住说话；或音量加+减一起按，随时随地录音")
+                    Trick(Icons.Default.Mic, "说一句", "点一下胶囊右边的话筒就能说话；音量加+减一起按也可以随时录音")
                     Trick(Icons.Default.SmartToy, "问路远", "点下方胶囊展开，再点「问路远」问它任何事；待办和设置都在底栏（待办带红点，设置是最右齿轮）")
                     Spacer(Modifier.height(16.dp))
                     Text(

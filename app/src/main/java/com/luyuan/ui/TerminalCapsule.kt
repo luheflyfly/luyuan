@@ -86,15 +86,24 @@ fun TerminalCapsule(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = modifier
             .fillMaxWidth()
-            .shadow(18.dp, RoundedCornerShape(22.dp), clip = false)
-            .background(
-                // 改不透明：原 0xF7/0xED 半透明叠在浅色页面上，会拉低输入文字的对比度
-                // （路河真机「打字看不见」）→ 统一为不透明纸白。
-                Color(0xFFFAF7F0),
-                RoundedCornerShape(22.dp)
+            // vc127：投影从 18dp 收到 10dp（纸面不需要重投影），圆角并入 20 档，面用 SurfaceHigh。
+            .shadow(
+                elevation = 10.dp,
+                shape = RoundedCornerShape(com.luyuan.ui.design.LuyuanRadius.xl),
+                clip = false,
+                ambientColor = Color(0x22163026),
+                spotColor = Color(0x33163026)
             )
-            .border(1.dp, Color(0x1A224A3A), RoundedCornerShape(22.dp))
-            .padding(start = 18.dp, end = 12.dp, top = 10.dp, bottom = 10.dp)
+            .background(
+                com.luyuan.ui.design.LuyuanPalette.SurfaceHigh,
+                RoundedCornerShape(com.luyuan.ui.design.LuyuanRadius.xl)
+            )
+            .border(
+                1.dp,
+                com.luyuan.ui.design.LuyuanPalette.Line,
+                RoundedCornerShape(com.luyuan.ui.design.LuyuanRadius.xl)
+            )
+            .padding(start = 16.dp, end = 10.dp, top = 8.dp, bottom = 8.dp)
     ) {
         if (expanded) {
             // ---------- 展开态：输入框（可切搜索）+ 按钮行 ----------
@@ -116,7 +125,7 @@ fun TerminalCapsule(
                     placeholder = { Text("搜索笔记…", fontSize = 14.sp, color = LuyuanColors.Ink3) },
                     textStyle = TextStyle(fontSize = 15.5.sp, color = LuyuanColors.Ink1),
                     colors = fieldColors,
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(com.luyuan.ui.design.LuyuanRadius.md),
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(focusReq)
@@ -125,13 +134,13 @@ fun TerminalCapsule(
                 OutlinedTextField(
                     value = inputText,
                     onValueChange = onInputTextChange,
-                    placeholder = { Text("记一笔，回车存笔记；点「日记」存进今天…", fontSize = 14.sp, color = LuyuanColors.Ink3) },
+                    placeholder = { Text("记一笔，回车存下；点「日记」存进今天…", fontSize = 14.sp, color = LuyuanColors.Ink3) },
                     textStyle = TextStyle(fontSize = 15.5.sp, color = LuyuanColors.Ink1),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { onCommitDiary() }),
                     maxLines = 4,
                     colors = fieldColors,
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(com.luyuan.ui.design.LuyuanRadius.md),
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 74.dp)
@@ -160,11 +169,18 @@ fun TerminalCapsule(
                 VoiceButton(onRecord)
             }
         } else {
-            // ---------- 收起态：占位文案 + 唯一语音圆钮 ----------
+            // ---------- 收起态：一支笔 + 一句提示 + 唯一语音圆钮 ----------
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Icon(
+                    Icons.Default.EditNote,
+                    contentDescription = null,
+                    tint = LuyuanColors.Green700,
+                    modifier = Modifier.size(17.dp)
+                )
+                Spacer(Modifier.width(9.dp))
                 Text(
-                    "记一笔笔记 / 说一句 / 问路远…",
-                    fontSize = 13.sp,
+                    "记一笔，或说一句…",
+                    fontSize = 13.5.sp,
                     color = LuyuanColors.Ink3,
                     modifier = Modifier
                         .weight(1f)
@@ -182,10 +198,10 @@ private fun VoiceButton(onRecord: () -> Unit) {
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
-            .size(38.dp)
+            .size(40.dp)
             .background(MaterialTheme.colorScheme.primary, CircleShape)
             .clickable { onRecord() }
-    ) { Icon(Icons.Default.Mic, contentDescription = "录音", tint = Color.White, modifier = Modifier.size(19.dp)) }
+    ) { Icon(Icons.Default.Mic, contentDescription = "录音", tint = Color.White, modifier = Modifier.size(20.dp)) }
 }
 
 @Composable
@@ -193,16 +209,19 @@ private fun ExpandedAction(label: String, icon: ImageVector, onClick: () -> Unit
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
-            .background(LuyuanColors.Green50, RoundedCornerShape(999.dp))
+            .background(
+                com.luyuan.ui.design.LuyuanPalette.Green50,
+                RoundedCornerShape(com.luyuan.ui.design.LuyuanRadius.pill)
+            )
             .clickable { onClick() }
-            .padding(horizontal = 10.dp, vertical = 7.dp)
+            .padding(horizontal = 11.dp, vertical = 8.dp)
     ) {
         Icon(icon, contentDescription = null, tint = LuyuanColors.Green700, modifier = Modifier.size(15.dp))
         Spacer(Modifier.width(5.dp))
         Text(
             label,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
+            fontSize = 12.5.sp,
+            fontWeight = FontWeight.SemiBold,
             color = LuyuanColors.Green700
         )
     }

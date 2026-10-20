@@ -70,6 +70,10 @@ import com.luyuan.data.NoteRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.luyuan.ui.design.LuyuanIconButton
+import com.luyuan.ui.design.LuyuanPalette
+import com.luyuan.ui.design.LuyuanTextAction
+import com.luyuan.ui.design.LuyuanTopBar
 
 /** 网络层异常人话化（HTTP 错误 AskRemote 已转中文，这里兜 UnknownHost/超时等英文原文） */
 private fun humanNetError(e: Exception): String = when (e) {
@@ -164,19 +168,13 @@ fun AskScreen(vm: LuyuanViewModel, onBack: () -> Unit) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("问路远", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
-                },
+            LuyuanTopBar(
+                title = "问路远",
+                subtitle = "本地优先 · 私密内容不外发",
+                onBack = onBack,
                 actions = {
-                    IconButton(onClick = {
-                        // 历史已持久化（v1.10.0），误触清空损失变大——先确认
-                        if (messages.isNotEmpty()) confirmClear = true
-                    }) {
-                        Text("新对话", fontSize = 13.sp)
+                    if (messages.isNotEmpty()) {
+                        LuyuanTextAction("新对话", onClick = { confirmClear = true })
                     }
                 }
             )

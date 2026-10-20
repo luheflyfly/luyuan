@@ -18,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.ChevronRight
@@ -66,6 +67,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.runtime.rememberCoroutineScope
+import com.luyuan.ui.design.LuyuanIconButton
+import com.luyuan.ui.design.LuyuanPalette
+import com.luyuan.ui.design.LuyuanTopBar
 
 /** 设置页 v2（路河拍板重排）：分区卡片化——📁目录/🔐权限/⌨️实体键/📚模型/🤖问路远/📱保活/ℹ️关于 */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -95,15 +99,11 @@ fun SettingsScreen(vm: LuyuanViewModel, onBack: () -> Unit, onAsk: () -> Unit = 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                ),
-                title = { Text("设置", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
+            // 抽屉里的设置：用「收起」而不是「返回」——抽屉不是页面栈，返回箭头会让人以为要退 App
+            LuyuanTopBar(
+                title = "设置",
+                actions = {
+                    LuyuanIconButton(Icons.Default.Close, "收起设置", onClick = onBack)
                 }
             )
         }
@@ -335,7 +335,7 @@ fun SettingsScreen(vm: LuyuanViewModel, onBack: () -> Unit, onAsk: () -> Unit = 
             // ---------- 🧭 底栏自定义（2026-09-15 路河拍板：子界面可自由放底栏） ----------
             SectionCard("底栏自定义", Icons.Default.Apps) {
                 Text(
-                    "笔记、日记固定在底栏；下面三页可以自由收起，收起后仍能从待办页、左缘抽屉或深链进入。",
+                    "笔记、日记固定在底栏；下面四页可以自由收起，收起后仍能从待办页、左缘抽屉或深链进入。",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -343,6 +343,7 @@ fun SettingsScreen(vm: LuyuanViewModel, onBack: () -> Unit, onAsk: () -> Unit = 
                 BottomNavToggle("记账", com.luyuan.data.BottomNavPrefs.KEY_LEDGER, com.luyuan.data.BottomNavPrefs.showLedger(context))
                 BottomNavToggle("学业", com.luyuan.data.BottomNavPrefs.KEY_COURSE, com.luyuan.data.BottomNavPrefs.showCourse(context))
                 BottomNavToggle("人脉", com.luyuan.data.BottomNavPrefs.KEY_PEOPLE, com.luyuan.data.BottomNavPrefs.showPeople(context))
+                BottomNavToggle("路远远", com.luyuan.data.BottomNavPrefs.KEY_REPORT, com.luyuan.data.BottomNavPrefs.showReport(context))
             }
 
             // ---------- 📬 消息待办（立项单 2026-09-13 T4/T5） ----------

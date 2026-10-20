@@ -15,10 +15,13 @@ object BottomNavPrefs {
     const val KEY_COURSE = "show_course"   // 学业，默认开
     // vc88（路河 09-16 批准「底栏五签」）：人脉使用频率低，默认收起——设置→底栏自定义一键开回
     const val KEY_PEOPLE = "show_people"   // 人脉，默认关
+    // vc125（路远远汇报批）：路远远页默认占底栏——晨报/管家讲解不再挤 QQ，得有顺手入口
+    const val KEY_REPORT = "show_report"   // 路远远，默认开
 
     fun showLedger(ctx: Context) = prefs(ctx).getBoolean(KEY_LEDGER, true)
     fun showCourse(ctx: Context) = prefs(ctx).getBoolean(KEY_COURSE, true)
     fun showPeople(ctx: Context) = prefs(ctx).getBoolean(KEY_PEOPLE, false)
+    fun showReport(ctx: Context) = prefs(ctx).getBoolean(KEY_REPORT, true)
 
     fun set(ctx: Context, key: String, v: Boolean): Unit {
         prefs(ctx).edit().putBoolean(key, v).apply()
@@ -34,6 +37,7 @@ object BottomNavPrefs {
         if (showLedger(ctx)) out.add(1)
         if (showCourse(ctx)) out.add(2)
         if (showPeople(ctx)) out.add(4)
+        if (showReport(ctx)) out.add(6)   // vc125：路远远汇报
         return out.sorted()
     }
 }

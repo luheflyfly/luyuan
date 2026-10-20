@@ -4,77 +4,132 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
+import androidx.compose.material3.Typography
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.luyuan.ui.design.LuyuanPalette
+import com.luyuan.ui.design.LuyuanRadius
 
-// 手机 UI 方案 A「五键直达」主题（2026-09-08 路河拍板）：
-// PC v20 同款设计 token——纸白 #faf7f0 基底 + 主深绿 #224a3a，旧蓝系全退（施工合同 §三）。
+/**
+ * 主题（vc127 重写）：颜色/字阶/圆角全部来自 ui/design/Tokens.kt，页面不再各写一套。
+ * 纸白 #F3EFE6 基底 + 墨绿 #224A3A 主色 + 木案金 #B08D4F 点睛——与电脑工作台同一套口径。
+ */
 private val LightColors = lightColorScheme(
-    primary = LuyuanColors.Green700, // vc124 双绿归一（原 #224A3A 与品牌绿 #2D5A48 并存）
+    primary = LuyuanPalette.Green800,
     onPrimary = Color.White,
-    secondary = Color(0xFF2D5A48),
+    primaryContainer = LuyuanPalette.Green100,
+    onPrimaryContainer = LuyuanPalette.Green900,
+    secondary = LuyuanPalette.Green700,
     onSecondary = Color.White,
-    background = Color(0xFFFAF7F0),
-    onBackground = Color(0xFF1A3329),
-    surface = Color.White,
-    onSurface = Color(0xFF1A3329),
-    surfaceVariant = Color(0xFFF6F3EB),
-    onSurfaceVariant = Color(0xFF4A5A52),
-    outline = Color(0xFFECE6D8),
-    error = Color(0xFFDC2626),
-    errorContainer = Color(0xFFFEE2E2),
-    onErrorContainer = Color(0xFFB91C1C)
+    background = LuyuanPalette.Paper,
+    onBackground = LuyuanPalette.Ink1,
+    surface = LuyuanPalette.Surface,
+    onSurface = LuyuanPalette.Ink1,
+    surfaceVariant = LuyuanPalette.Sunken,
+    onSurfaceVariant = LuyuanPalette.Ink2,
+    outline = Color(0xFFE2DACB),
+    outlineVariant = LuyuanPalette.Line,
+    error = LuyuanPalette.Red,
+    onError = Color.White,
+    errorContainer = LuyuanPalette.RedBg,
+    onErrorContainer = LuyuanPalette.Red
 )
 
-/** colorScheme 装不下的语义色（徽章/分类彩条/渐变），全 App 唯一定义处，禁止页内写死 */
+private val LuyuanTypography = Typography(
+    // 页面标题（自定义头部用 LuyuanType.page；这里兜底 M3 默认路径）
+    headlineMedium = TextStyle(
+        fontSize = 24.sp, lineHeight = 30.sp, fontWeight = FontWeight.Bold, color = LuyuanPalette.Ink1
+    ),
+    // TopAppBar / 弹窗标题
+    titleLarge = TextStyle(
+        fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.Bold, color = LuyuanPalette.Ink1
+    ),
+    titleMedium = TextStyle(
+        fontSize = 15.5.sp, lineHeight = 21.sp, fontWeight = FontWeight.SemiBold, color = LuyuanPalette.Ink1
+    ),
+    titleSmall = TextStyle(
+        fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold, color = LuyuanPalette.Ink1
+    ),
+    bodyLarge = TextStyle(
+        fontSize = 15.sp, lineHeight = 23.sp, fontWeight = FontWeight.Normal, color = LuyuanPalette.Ink1
+    ),
+    bodyMedium = TextStyle(
+        fontSize = 14.sp, lineHeight = 22.sp, fontWeight = FontWeight.Normal, color = LuyuanPalette.Ink1
+    ),
+    bodySmall = TextStyle(
+        fontSize = 13.sp, lineHeight = 19.sp, fontWeight = FontWeight.Normal, color = LuyuanPalette.Ink2
+    ),
+    labelLarge = TextStyle(
+        fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold, color = LuyuanPalette.Ink1
+    ),
+    labelMedium = TextStyle(
+        fontSize = 11.5.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium, color = LuyuanPalette.Ink2
+    ),
+    labelSmall = TextStyle(
+        fontSize = 11.sp, lineHeight = 15.sp, fontWeight = FontWeight.Normal, color = LuyuanPalette.Ink3
+    )
+)
+
+private val LuyuanShapes = Shapes(
+    extraSmall = LuyuanRadius.smShape,
+    small = LuyuanRadius.mdShape,
+    medium = LuyuanRadius.lgShape,
+    large = LuyuanRadius.lgShape,
+    extraLarge = LuyuanRadius.xlShape
+)
+
+/** colorScheme 装不下的语义色：全 App 唯一别名处（值全部来自 Tokens）。 */
 object LuyuanColors {
-    // 绿系（次级强调 / 头像底 / 统计卡渐变）
-    val Green900 = Color(0xFF224A3A)
-    val Green700 = Color(0xFF2D5A48)
-    val Green500 = Color(0xFF4F8A73)
-    val Green100 = Color(0xFFE3ECE6)
-    val Green50 = Color(0xFFF1F5F2)
+    val Green900 = LuyuanPalette.Green900
+    val Green800 = LuyuanPalette.Green800
+    val Green700 = LuyuanPalette.Green700
+    val Green600 = LuyuanPalette.Green600
+    val Green500 = LuyuanPalette.Green500
+    val Green100 = LuyuanPalette.Green100
+    val Green50 = LuyuanPalette.Green50
 
-    // 正文灰阶
-    val Ink1 = Color(0xFF1A3329)
-    val Ink2 = Color(0xFF4A5A52)
-    val Ink3 = Color(0xFF8A9690)
-    val Ink4 = Color(0xFFB8C0BB)
+    val Ink1 = LuyuanPalette.Ink1
+    val Ink2 = LuyuanPalette.Ink2
+    val Ink3 = LuyuanPalette.Ink3
+    val Ink4 = LuyuanPalette.Ink4
 
-    // 徽章口径（路河抽查项，两端必须一致）：语音=蓝 / 待办·记账=琥珀 / 写作=紫 / 购物·生日=粉 / 提醒=红
-    val Amber = Color(0xFFB45309)
-    val AmberBg = Color(0xFFFEF3C7)
-    val Red = Color(0xFFDC2626)
-    val RedBg = Color(0xFFFEE2E2)
-    val Blue = Color(0xFF1D4ED8)
-    val BlueBg = Color(0xFFDBEAFE)
-    val Purple = Color(0xFF6D28D9)
-    val PurpleBg = Color(0xFFEDE9FE)
-    val Pink = Color(0xFFBE185D)
-    val PinkBg = Color(0xFFFCE7F3)
+    val Amber = LuyuanPalette.Amber
+    val AmberBg = LuyuanPalette.AmberBg
+    val Red = LuyuanPalette.Red
+    val RedBg = LuyuanPalette.RedBg
+    val Blue = LuyuanPalette.Blue
+    val BlueBg = LuyuanPalette.BlueBg
+    val Purple = LuyuanPalette.Purple
+    val PurpleBg = LuyuanPalette.PurpleBg
+    val Pink = LuyuanPalette.Pink
+    val PinkBg = LuyuanPalette.PinkBg
 
-    // 分隔线（强）
-    val DividerStrong = Color(0xFFD8D2C0)
+    val Gold = LuyuanPalette.Gold
+    val GoldSoft = LuyuanPalette.GoldSoft
+    val Line = LuyuanPalette.Line
+    val LineStrong = LuyuanPalette.LineStrong
 
-    // 暖灰底 / 课务木案金（2026-09-18 检查批收编：此前散落页内写死）
-    val WarmBg = Color(0xFFF6F3EB)
-    val KeiwuGold = Color(0xFFA8843A)
+    val DividerStrong = LuyuanPalette.DividerStrong
+    val WarmBg = LuyuanPalette.WarmBg
+    val KeiwuGold = LuyuanPalette.KeiwuGold
+    val GradGreenStart = LuyuanPalette.GradGreenStart
+    val GradGreenEnd = LuyuanPalette.GradGreenEnd
 
-    // 深绿渐变（统计卡/下一节卡）
-    val GradGreenStart = Color(0xFF2D5A48)
-    val GradGreenEnd = Color(0xFF1D3F31)
-
-    /** 记账分类彩条：餐饮琥珀 / 学习紫 / 日用绿 / 娱乐粉 / 其他灰（合同 §五-2） */
     fun categoryColor(category: String): Color = when (category) {
         "餐饮" -> Amber
         "学习" -> Purple
-        "日用" -> Green500
+        "日用" -> Green600
         "娱乐" -> Pink
         else -> Ink3
     }
@@ -84,7 +139,7 @@ object LuyuanColors {
         "学习" -> PurpleBg
         "日用" -> Green100
         "娱乐" -> PinkBg
-        else -> Color(0xFFF6F3EB)
+        else -> LuyuanPalette.Sunken
     }
 }
 
@@ -92,6 +147,8 @@ object LuyuanColors {
 fun LuyuanTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = LightColors,
+        typography = LuyuanTypography,
+        shapes = LuyuanShapes,
         content = content
     )
 }

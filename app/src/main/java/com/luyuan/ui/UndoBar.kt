@@ -1,28 +1,33 @@
 package com.luyuan.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.luyuan.ui.design.LuyuanPalette
+import com.luyuan.ui.design.LuyuanRadius
 import kotlinx.coroutines.delay
 
 /**
- * 删除撤回条（手机二期 #1，与 B2 删除族口径一致）：
- * 无确认弹窗；深绿条「message · 撤回 | 立即删除」，durationMs 倒计时后自动提交。
- * onUndo=撤回（原地恢复）；onCommit=立即删除（软删进回收站）。
- * 颜色走 LuyuanColors.Green700，禁止页内写死。
+ * 删除撤回条（vc127 重排）：软删不弹确认，先删再给 5 秒撤回。
+ * 深绿胶囊 + 细分隔 + 两个文字动作，坐在底栏之上；倒计时结束自动提交。
  */
 @Composable
 fun UndoBar(
@@ -40,20 +45,50 @@ fun UndoBar(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 12.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(LuyuanColors.Green700)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .shadow(
+                elevation = 10.dp,
+                shape = RoundedCornerShape(LuyuanRadius.lg),
+                clip = false,
+                ambientColor = Color(0x33163026),
+                spotColor = Color(0x33163026)
+            )
+            .clip(RoundedCornerShape(LuyuanRadius.lg))
+            .background(LuyuanPalette.Green900)
+            .padding(start = 16.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(
-            "$message · 撤回",
-            color = Color.White,
-            fontSize = 14.sp
+            message,
+            color = Color(0xFFE9F1EC),
+            fontSize = 13.sp,
+            maxLines = 1,
+            modifier = Modifier.weight(1f)
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            TextButton(onClick = onUndo) { Text("撤回", color = Color.White) }
-            TextButton(onClick = onCommit) { Text("立即删除", color = Color(0xFFFFD9D9)) }
+        Spacer(Modifier.width(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "撤回",
+                color = Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .heightIn(min = 36.dp)
+                    .clip(RoundedCornerShape(LuyuanRadius.pill))
+                    .clickable(onClick = onUndo)
+                    .padding(horizontal = 12.dp, vertical = 9.dp)
+            )
+            Text(
+                "立即删除",
+                color = Color(0xFFF3B9B7),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .heightIn(min = 36.dp)
+                    .clip(RoundedCornerShape(LuyuanRadius.pill))
+                    .clickable(onClick = onCommit)
+                    .padding(horizontal = 12.dp, vertical = 9.dp)
+            )
         }
     }
 }

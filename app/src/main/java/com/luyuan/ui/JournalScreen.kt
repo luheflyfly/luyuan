@@ -78,6 +78,10 @@ import java.io.File
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
+import com.luyuan.ui.design.LuyuanIconButton
+import com.luyuan.ui.design.LuyuanPalette
+import com.luyuan.ui.design.LuyuanSpace
+import com.luyuan.ui.design.LuyuanTopBar
 
 /** 与 PC 端面板完全一致的表情库（app.js EMOJIS） */
 private val EMOJIS = ("😀 😄 😅 😂 🤣 😊 😍 😘 😜 🤪 🤔 🤨 😐 😴 🤤 😪 🥱 😏 😒 🥺 😢 😭 😤 😡 🤬 🤯 😳 🥵 🥶 😱 😨 😰 😥 😓 🤗 🤭 🤫 🤥 😶 😬 🙄 😯 😦 😧 😮 😲 🥳 😵 🤢 🤮 🤕 🤒 🤧 😷 🥴 😈 👿 💀 👻 👽 🤖 💩 😺 🙈 🙉 🐶 🐱 🐭 🐰 🦊 🐻 🐼 🐨 🐯 🦁 🐮 🐷 🐸 🐔 🐧 🦄 🐝 🦋 🌸 🌹 🌻 🌈 ⭐ 🌙 ☀️ ⛅ 🌧️ ❄️ 🔥 💧 🎉 🎊 🎁 🎂 🍀 🌰 🍕 🍔 🍜 🍚 🍣 🍰 🍦 ☕ 🍺 🍷 💪 👍 👎 👏 🙏 ❤️ 💔 💯 ⚡ 🎵 🎮 💤 💰 📚 ✏️ 🏃 🚴").split(" ")
@@ -177,34 +181,13 @@ fun JournalScreen(vm: LuyuanViewModel, onRecord: () -> Unit, onReview: () -> Uni
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("日记", fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "连续 $streak 天",
-                            fontSize = 11.sp,
-                            color = LuyuanColors.Ink3,
-                            modifier = Modifier
-                                .background(LuyuanColors.Ink4.copy(alpha = 0.08f), RoundedCornerShape(999.dp))
-                                .padding(horizontal = 10.dp, vertical = 3.dp)
-                        )
-                    }
-                },
+            // vc127：统一自绘头部。「只写今天这篇」是说明不是按钮（旧版像个可点的琥珀药丸），撤掉；
+            // 连续天数并入副题，不再一屏出现三次。
+            LuyuanTopBar(
+                title = "日记",
+                subtitle = if (streak > 0) "连续 $streak 天" else "今天写下第一句",
                 actions = {
-                    IconButton(onClick = onReview) {
-                        Icon(Icons.Default.BarChart, contentDescription = "本周回顾")
-                    }
-                    Text(
-                        "只写今天这篇",
-                        fontSize = 10.sp,
-                        color = LuyuanColors.Amber,
-                        modifier = Modifier
-                            .background(LuyuanColors.AmberBg, RoundedCornerShape(999.dp))
-                            .padding(horizontal = 10.dp, vertical = 4.dp)
-                    )
-                    Spacer(Modifier.width(10.dp))
+                    LuyuanIconButton(Icons.Default.BarChart, "本周回顾", onClick = onReview)
                 }
             )
         }
@@ -215,7 +198,7 @@ fun JournalScreen(vm: LuyuanViewModel, onRecord: () -> Unit, onReview: () -> Uni
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
-                .padding(bottom = 96.dp), // 避让悬浮胶囊（任务9：定时提醒开关此前被遮）
+                .padding(bottom = 104.dp), // 避让悬浮胶囊（任务9：定时提醒开关此前被遮）
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             // ---------- 书写卡（journal-desk 稿 .desk）：直写 + 自动保存 + 工具条 ----------
@@ -269,7 +252,7 @@ fun JournalScreen(vm: LuyuanViewModel, onRecord: () -> Unit, onReview: () -> Uni
                             Box {
                                 if (diaryValue.text.isEmpty()) {
                                     Text(
-                                        "今天想记录点什么？支持换行",
+                                        "今天想记点什么？",
                                         fontSize = 16.sp, color = LuyuanColors.Ink4
                                     )
                                 }

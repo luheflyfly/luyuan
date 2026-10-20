@@ -89,6 +89,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 
 import com.luyuan.domain.Note
+import com.luyuan.ui.design.LuyuanPalette
+import com.luyuan.ui.design.LuyuanTopBar
 
 /** 第二屏 · 人脉：待办置顶红板 + 联系人字母索引 + 搜索，数据来自共享目录 contacts/ */
 
@@ -155,7 +157,9 @@ fun PeopleScreen(vm: LuyuanViewModel, onNoteClick: (String) -> Unit = {}) {
     val grouped = remember(inGroup) { inGroup.groupBy { it.displayLetter }.toSortedMap() }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("人脉", fontWeight = FontWeight.Bold) }) }
+        topBar = {
+            LuyuanTopBar(title = "人脉", subtitle = "共 ${inGroup.size} 位 · 按拼音首字母")
+        }
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             OutlinedTextField(
@@ -203,7 +207,7 @@ fun PeopleScreen(vm: LuyuanViewModel, onNoteClick: (String) -> Unit = {}) {
             Box(modifier = Modifier.fillMaxSize()) {
                 LazyColumn(
                     state = listState,
-                    contentPadding = PaddingValues(bottom = 96.dp),
+                    contentPadding = PaddingValues(bottom = 104.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp)
                 ) {

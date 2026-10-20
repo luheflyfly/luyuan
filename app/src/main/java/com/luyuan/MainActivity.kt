@@ -34,6 +34,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.People
@@ -83,6 +84,7 @@ import com.luyuan.ui.AskScreen
 import com.luyuan.ui.LuyuanColors
 import com.luyuan.ui.LuyuanViewModel
 import com.luyuan.ui.NoteListScreen
+import com.luyuan.ui.ReportScreen
 import androidx.compose.ui.graphics.graphicsLayer
 import com.luyuan.ui.rememberPressScale
 import com.luyuan.ui.PeopleScreen
@@ -92,6 +94,7 @@ import com.luyuan.ui.TodoScreen
 import com.luyuan.ui.AskKeyScreen
 import com.luyuan.ui.TerminalCapsule
 import com.luyuan.ui.TrashScreen
+import com.luyuan.ui.shell.LuyuanDrawerHost
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
@@ -178,13 +181,22 @@ fun AppRoot(startDest: String) {
             Triple(3, "日记", Icons.Default.EditNote),
             Triple(1, "记账", Icons.Default.Payments),
             Triple(2, "学业", Icons.Default.School),
-            Triple(4, "人脉", Icons.Default.People)
+            Triple(4, "人脉", Icons.Default.People),
+            Triple(6, "路远远", Icons.Default.Campaign)   // vc125：路远远汇报（SYNC_FORMAT §10.6，与 PC 工作台同源）
         ).filter { it.first in visibleSlots }
     }
-    // pageCount 走状态而不是直接捕列表：底栏偏好变化导致页数增减时 Pager 实时取新值
-    val pagerPageCount = androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(tabs.size) }
-    pagerPageCount.intValue = tabs.size
-    val pagerState = rememberPagerState(initialPage = 0) { pagerPageCount.intValue }
+    // vc127：pageCount 直接由 tabs 派生（rememberPagerState 每次重组都会更新 pageCount 回调）。
+    // 旧写法在组合里给 mutableIntStateOf 赋值（side-effect in composition），页数增减当帧可能读到旧值。
+    val pagerState = rememberPagerState(initialPage = 0) { tabs.size }
+    // 底栏开关增减页数时，按「页面槽位 id」把当前页搬到新序号——否则 index 3 会从日记悄悄变成记账。
+    // 读 currentPage 必须在协程里（vc123 纪律：组合作用域不读会变的页码）。
+    LaunchedEffect(visibleSlots) {
+        val slot = tabs.getOrNull(pagerState.currentPage)?.first ?: return@LaunchedEffect
+        val target = tabs.indexOfFirst { it.first == slot }
+        if (target >= 0 && target != pagerState.currentPage) {
+            runCatching { pagerState.scrollToPage(target) }
+        }
+    }
     var searchMode by remember { mutableStateOf(false) }
     val searchQuery by vm.searchQuery.collectAsStateWithLifecycle()
     val multiSelect by vm.multiSelect.collectAsStateWithLifecycle()
@@ -193,22 +205,36 @@ fun AppRoot(startDest: String) {
     var showSettings by remember { mutableStateOf(false) }
     BackHandler(enabled = showSettings) { showSettings = false }
     BackHandler(enabled = showAsk && !showSettings) { showAsk = false }
-    // 三级联动：主内容随层级平移+变暗（left-ia 稿 .main transform：86px=问路远层、60px=设置层、透明度 .55）
+    // 层级联动（vc127）：整块壳（NavHost + 底栏 + 胶囊）一起左移/压暗，抽屉边缘不会切在一条发亮的底栏上。
+    // 幅度从 86dp 收到 26dp：手机上大平移动效看着"晃"，小幅退让 + 压暗已经足够表达"下面还有一层"。
     val drawerShift by androidx.compose.animation.core.animateDpAsState(
         when {
-            showSettings -> 60.dp
-            showAsk -> 86.dp
+            showSettings -> com.luyuan.ui.shell.ShellShift.SettingsDx.dp
+            showAsk -> com.luyuan.ui.shell.ShellShift.AskDx.dp
             else -> 0.dp
         },
+        animationSpec = androidx.compose.animation.core.tween(
+            250, easing = com.luyuan.ui.LuyuanMotion.Flow
+        ),
         label = "drawerShift"
     )
     val drawerDim by androidx.compose.animation.core.animateFloatAsState(
-        if (showAsk || showSettings) 0.55f else 1f,
+        if (showAsk || showSettings) com.luyuan.ui.shell.ShellShift.Dim else 1f,
+        animationSpec = androidx.compose.animation.core.tween(
+            250, easing = com.luyuan.ui.LuyuanMotion.Flow
+        ),
         label = "drawerDim"
     )
     val ctx = LocalContext.current
     // 超级输入框 v3（Q13 拍板）：点胶囊向下展开，展开态才有输入框+三按钮；草稿走 prefs
     var expanded by remember { mutableStateOf(false) }
+    // 抽屉打开时收起胶囊：否则输入框和抽屉抢同一块屏幕
+    LaunchedEffect(showAsk, showSettings) {
+        if (showAsk || showSettings) {
+            expanded = false
+            searchMode = false
+        }
+    }
     // vc95（路河 09-17 深夜拍板：①不要「拉到尽头回弹」，拉就直接出 ②一切触摸覆盖物免谈）：
     // 「笔记页右滑唤设置侧栏」= nested scroll 纯旁观器——只在 Pager 将要消费拖拽前
     // 记一笔横向右量，不参与命中测试、一个触摸节点都不新增。第一页右拖累计 >120dp
@@ -348,6 +374,8 @@ fun AppRoot(startDest: String) {
 
     // 待办红点（vc79 挂底栏「待办」钮；vc115 改数未办待办——原数待确认存量，vc108 退役后无 UI 出口，数字永不归零）
     var pendingTodoCount by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    // vc125：底栏「路远远」红点 = 汇报未读数（同口径挂 IO 线程读）
+    var reportUnreadCount by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
     // vc123 治切页卡顿：页码读取移出组合（snapshotFlow）。
     // 原写法 LaunchedEffect(pagerState.currentPage) 把 currentPage 读进了 AppRoot 的组合作用域——
     // 每次切页都整个 AppRoot 重组，六个常驻页面全部重新执行（vc89 红点统计引入的隐性代价）。
@@ -358,6 +386,9 @@ fun AppRoot(startDest: String) {
             pendingTodoCount = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 runCatching { com.luyuan.data.TodoStore.list(ctx).count { !it.done } }.getOrDefault(0)
             }
+            reportUnreadCount = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { com.luyuan.data.ReportStore.unreadCount(ctx) }.getOrDefault(0)
+            }
         }
     }
     androidx.compose.runtime.LaunchedEffect(Unit) {
@@ -366,9 +397,22 @@ fun AppRoot(startDest: String) {
             pendingTodoCount = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 runCatching { com.luyuan.data.TodoStore.list(ctx).count { !it.done } }.getOrDefault(0)
             }
+            reportUnreadCount = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { com.luyuan.data.ReportStore.unreadCount(ctx) }.getOrDefault(0)
+            }
         }
     }
 
+    Box(Modifier.fillMaxSize()) {
+        // 壳（NavHost + 底栏 + 胶囊）整块退让/压暗；抽屉在上层，不跟着暗。
+        Box(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    translationX = drawerShift.toPx()
+                    alpha = drawerDim
+                }
+        ) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         // edge-to-edge 配套：外壳不管状态栏/导航栏 insets——各屏自己的 Scaffold/TopAppBar
@@ -377,48 +421,33 @@ fun AppRoot(startDest: String) {
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (currentRoute == "home") {
-                NavigationBar(containerColor = MaterialTheme.colorScheme.background) {
-                    // vc87：tabs=底栏可见页（显示顺序=翻页顺序，页数=队列长度）；最右齿轮=设置抽屉不占槽位
-                    for ((index, tab) in tabs.withIndex()) {
-                        val (slot, label, icon) = tab
-                        // vc93（路河 09-17：「点一个全体闪」根因=所有 tab 共享一个按压源）：逐 tab 独立
-                        val itemInteraction = remember(slot) { MutableInteractionSource() }
-                        val itemScale = rememberPressScale(itemInteraction)
-                        NavigationBarItem(
-                            selected = pagerState.currentPage == index,
-                            onClick = {
-                                if (pagerState.currentPage != index) {
-                                    // 09-11 修「点击底部标签掉帧」：animateScrollToPage 跨页滚动会
-                                    // 逐页渲染中间页（笔记→人脉要滚过 3 页），每页现场组装 → 掉帧。
-                                    // 改瞬移，只渲染目标页 1 页；滑动切页的动画不受影响。
-                                    scope.launch { pagerState.scrollToPage(index) }
-                                }
-                            },
-                            icon = {
-                                if (slot == 5) {
-                                    // 待办红点：未办待办条数（vc115 起=待办页「未办 N 件」同口径）
-                                    androidx.compose.material3.BadgedBox(badge = {
-                                        if (pendingTodoCount > 0) {
-                                            androidx.compose.material3.Badge { Text("$pendingTodoCount") }
-                                        }
-                                    }) { Icon(icon, contentDescription = label) }
-                                } else {
-                                    Icon(icon, contentDescription = label)
-                                }
-                            },
-                            label = { Text(label) },
-                            interactionSource = itemInteraction,
-                            modifier = Modifier.graphicsLayer { scaleX = itemScale; scaleY = itemScale }
+                // vc127：自绘底栏（ui/shell/Dock.kt）。旧 M3 NavigationBar 在 393dp 上 8 个槽每格 49dp，
+                // 又高又挤；新底栏 60dp，页签等分，选中项浅绿药丸托图标，设置单独一枚动作钮。
+                com.luyuan.ui.shell.LuyuanDock(
+                    items = tabs.map { t ->
+                        com.luyuan.ui.shell.DockItem(
+                            page = t.first,
+                            label = t.second,
+                            icon = t.third,
+                            badge = when (t.first) {
+                                5 -> pendingTodoCount
+                                6 -> reportUnreadCount
+                                else -> 0
+                            }
                         )
-                    }
-                    // 设置：底栏最右齿轮（vc79；开抽屉，不占页面槽位）
-                    NavigationBarItem(
-                        selected = showSettings,
-                        onClick = { showSettings = true },
-                        icon = { Icon(Icons.Default.Settings, contentDescription = "设置") },
-                        label = { Text("设置") }
-                    )
-                }
+                    },
+                    selectedPageProvider = {
+                        tabs.getOrNull(pagerState.currentPage)?.first ?: -1
+                    },
+                    onSelect = { slot ->
+                        val index = tabs.indexOfFirst { it.first == slot }
+                        if (index >= 0 && index != pagerState.currentPage) {
+                            scope.launch { pagerState.scrollToPage(index) }
+                        }
+                    },
+                    onSettings = { showSettings = true },
+                    settingsSelected = showSettings
+                )
             }
         }
     ) { pad ->
@@ -432,17 +461,49 @@ fun AppRoot(startDest: String) {
             NavHost(
                 navController = nav,
                 startDestination = "home",
-                // 只在抽屉开着时才挂 graphicsLayer（alpha/平移）：避免空闲态给整页内容套离屏层拖累翻页帧率
-                modifier = if (showAsk || showSettings) {
-                    Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            translationX = drawerShift.toPx()
-                            alpha = drawerDim
-                        }
-                } else {
-                    Modifier.fillMaxSize()
-                }
+                // vc127：push/pop 显式过渡。navigation-compose 默认是 700ms 交叉淡入——慢且糊，
+                // 层级关系也读不出来。现在统一：推入从右滑入 1/5 屏 + 150ms 淡入，返回反向。
+                enterTransition = {
+                    androidx.compose.animation.slideInHorizontally(
+                        animationSpec = androidx.compose.animation.core.tween(
+                            280, easing = com.luyuan.ui.LuyuanMotion.Spring
+                        ),
+                        initialOffsetX = { it / 5 }
+                    ) + androidx.compose.animation.fadeIn(
+                        androidx.compose.animation.core.tween(160)
+                    )
+                },
+                exitTransition = {
+                    androidx.compose.animation.slideOutHorizontally(
+                        animationSpec = androidx.compose.animation.core.tween(
+                            220, easing = com.luyuan.ui.LuyuanMotion.Flow
+                        ),
+                        targetOffsetX = { -it / 10 }
+                    ) + androidx.compose.animation.fadeOut(
+                        androidx.compose.animation.core.tween(180)
+                    )
+                },
+                popEnterTransition = {
+                    androidx.compose.animation.slideInHorizontally(
+                        animationSpec = androidx.compose.animation.core.tween(
+                            240, easing = com.luyuan.ui.LuyuanMotion.Spring
+                        ),
+                        initialOffsetX = { -it / 10 }
+                    ) + androidx.compose.animation.fadeIn(
+                        androidx.compose.animation.core.tween(160)
+                    )
+                },
+                popExitTransition = {
+                    androidx.compose.animation.slideOutHorizontally(
+                        animationSpec = androidx.compose.animation.core.tween(
+                            240, easing = com.luyuan.ui.LuyuanMotion.Flow
+                        ),
+                        targetOffsetX = { it / 5 }
+                    ) + androidx.compose.animation.fadeOut(
+                        androidx.compose.animation.core.tween(180)
+                    )
+                },
+                modifier = Modifier.fillMaxSize()
             ) {
                 composable("home") {
                     // 09-10 治卡顿：beyondBoundsPageCount 4 -> 1。
@@ -456,7 +517,21 @@ fun AppRoot(startDest: String) {
                         modifier = Modifier.nestedScroll(rightSwipeWatch).fillMaxSize()
                     ) { page ->
                         // vc87：page=底栏可见序（与 tabs 一一对应）；隐藏页已不在队列，不再有占位提示
-                        val slot = tabs[page].first
+                        // vc127：底栏增减页数的那一帧 page 可能越界，直接跳过而不是崩。
+                        val slot = tabs.getOrNull(page)?.first ?: return@HorizontalPager
+                        // 翻页景深：相邻页缩 3.5% / 暗 18%，横滑有前后关系；读页码写在 layer 里（只重绘不重组）。
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .graphicsLayer {
+                                    val offset = (pagerState.currentPage - page) +
+                                        pagerState.currentPageOffsetFraction
+                                    val d = kotlin.math.abs(offset).coerceIn(0f, 1f)
+                                    scaleX = 1f - 0.035f * d
+                                    scaleY = 1f - 0.035f * d
+                                    alpha = 1f - 0.18f * d
+                                }
+                        ) {
                         when (slot) {
                             0 -> NoteListScreen(
                                 vm = vm,
@@ -487,8 +562,10 @@ fun AppRoot(startDest: String) {
                                 nav.navigate("record") { launchSingleTop = true }
                             }, onReview = { nav.navigate("review") }) // 📊本周回顾迁来日记页（IA 重排）
                             5 -> TodoScreen(vm = vm, onBack = { nav.popBackStack() }, embedded = true) // 待办升底栏一级页（vc79）
+                            6 -> ReportScreen(onBack = { nav.popBackStack() }, embedded = true) // vc125：路远远汇报页
                             else -> PeopleScreen(vm = vm, onNoteClick = { nav.navigate("detail/$it") })
                         }
+                        } // Box（翻页景深）
                     }
                 }
                 composable("record") {
@@ -571,7 +648,7 @@ fun AppRoot(startDest: String) {
             // 09-15 路河实测拍板回退：恢复「点一下胶囊就地展开」（Q13 拍板版），撤掉 TerminalInputDialog 中转。
             // 已知权衡：vivo/鸿蒙 4 主窗口 IME insets 可能拿不到——若「打字被键盘挡住」回归，就在展开态输入框上
             // 继续治（胶囊层 imePadding 已挂），不再改道独立窗口。
-            if (currentRoute == "home" && !multiSelect) {
+            if (currentRoute == "home" && !multiSelect && !showAsk && !showSettings) {
                 TerminalCapsule(
                     expanded = expanded,
                     onToggleExpanded = { expanded = !expanded },
@@ -655,54 +732,23 @@ fun AppRoot(startDest: String) {
         }
     }
 
-    // 左侧两级抽屉（left-ia · 路河 09:57 口径）：一层问路远（84%），二层设置（78%）盖在上层；
-    // 返回键逐层收（BackHandler 在上方）；点遮罩全收。右侧完全不碰（那是 Pager 翻页方向）。
-    if (showAsk || showSettings) {
-        Box(Modifier.fillMaxSize()) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(androidx.compose.ui.graphics.Color(0x52000000))
-                    .clickable { showAsk = false; showSettings = false }
+    } // shifted Box
+
+    // 左侧两级抽屉（vc127 重写：显式进出动画、深绿遮罩、减少动画降级；见 ui/shell/DrawerHost.kt）
+    LuyuanDrawerHost(
+        askOpen = showAsk,
+        settingsOpen = showSettings,
+        onDismiss = { showAsk = false; showSettings = false },
+        onDismissSettings = { showSettings = false },
+        askContent = { AskScreen(vm = vm, onBack = { showAsk = false }) },
+        settingsContent = {
+            SettingsScreen(
+                vm = vm,
+                onBack = { showSettings = false },
+                onAsk = { showSettings = false; showAsk = true },
+                onAskKey = { showSettings = false; nav.navigate("askkey") }
             )
-            AnimatedVisibility(
-                visible = showAsk,
-                enter = slideInHorizontally(initialOffsetX = { -it }) + fadeIn(),
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .fillMaxHeight()
-                    .fillMaxWidth(0.84f)
-            ) {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.background)
-                ) {
-                    AskScreen(vm = vm, onBack = { showAsk = false })
-                    // vc90：二层手势条已撤——左缘滑动现在直接开设置（路河拍板），问路远走胶囊/设置入口
-                }
-            }
-            AnimatedVisibility(
-                visible = showSettings,
-                enter = slideInHorizontally(initialOffsetX = { -it }) + fadeIn(),
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .fillMaxHeight()
-                    .fillMaxWidth(0.78f)
-            ) {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.background)
-                ) {
-                    SettingsScreen(
-                        vm = vm,
-                        onBack = { showSettings = false },
-                        onAsk = { showSettings = false; showAsk = true },
-                        onAskKey = { showSettings = false; nav.navigate("askkey") }
-                    )
-                }
-            }
         }
-    }
+    )
+    } // outer Box
 }

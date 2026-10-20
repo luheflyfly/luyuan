@@ -10,6 +10,12 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -92,6 +98,14 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.luyuan.domain.Note
 import com.luyuan.platform.PermissionHelper
+import com.luyuan.ui.design.LuyuanBadge
+import com.luyuan.ui.design.LuyuanIconButton
+import com.luyuan.ui.design.LuyuanPalette
+import com.luyuan.ui.design.LuyuanRadius
+import com.luyuan.ui.design.LuyuanSpace
+import com.luyuan.ui.design.LuyuanTone
+import com.luyuan.ui.design.LuyuanTopBar
+import com.luyuan.ui.design.LuyuanType
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -266,7 +280,7 @@ private fun splitTitleSummary(text: String): Pair<String, String> {
     return title to rest.trim().take(64)
 }
 
-/** 搜索命中高亮（琥珀底，同 PC 面板） */
+/** 搜索命中高亮（木案金淡底 + 墨字，同 PC 面板；不用刺眼的柠檬黄） */
 private fun highlighted(text: String, query: String): AnnotatedString {
     val q = query.trim()
     if (q.isEmpty()) return AnnotatedString(text)
@@ -279,7 +293,7 @@ private fun highlighted(text: String, query: String): AnnotatedString {
             val found = lower.indexOf(qLower, i)
             if (found < 0) break
             addStyle(
-                SpanStyle(background = Color(0xFFFEF08A), color = Color(0xFF713F12)),
+                SpanStyle(background = Color(0x33B08D4F), color = Color(0xFF1F2E25)),
                 found, found + q.length
             )
             i = found + q.length
@@ -324,27 +338,29 @@ fun NoteListScreen(
     }
     val groups = remember(filtered) { groupByDay(filtered) }
 
+    val todayCount = remember(notes) { notes.count { parseDay(it.created_at) == LocalDate.now() } }
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        if (selecting) "已选 ${selected.size}" else "路远 · 记事",
-                        fontWeight = FontWeight.Bold
-                    )
-                },
+            // vc127：自绘头部（ui/design/Components.kt）。标题 24sp + 一行副题报数，
+            // 动作收成 36dp 圆钮；多选态只留「全选/分享/合并/删除/完成」，不再挤 7 枚。
+            LuyuanTopBar(
+                title = if (selecting) "已选 ${selected.size} 条" else "笔记",
+                subtitle = if (selecting) null else "今天 $todayCount 条 · 共 ${notes.size} 条",
                 actions = {
                     if (selecting) {
-                        IconButton(onClick = {
-                            selected = if (selected.size == filtered.size) emptySet()
-                            else filtered.map { it.id }.toSet()
-                        }) {
-                            Icon(Icons.Default.SelectAll, contentDescription = "全选/全不选")
-                        }
-                        // 多选分享：把选中笔记按时间顺序拼成纯文本，走系统分享（微信/QQ等都能收）
-                        IconButton(
+                        LuyuanIconButton(
+                            Icons.Default.SelectAll, "全选/全不选",
+                            enabled = filtered.isNotEmpty(),
+                            onClick = {
+                                selected = if (selected.size == filtered.size) emptySet()
+                                else filtered.map { it.id }.toSet()
+                            }
+                        )
+                        LuyuanIconButton(
+                            Icons.Default.Share, "分享选中",
                             enabled = selected.isNotEmpty(),
                             onClick = {
+                                // 多选分享：把选中笔记按时间顺序拼成纯文本，走系统分享（微信/QQ 都能收）
                                 val body = notes.filter { it.id in selected }
                                     .sortedByDescending { it.created_at }
                                     .joinToString("\n\n") { n ->
@@ -369,10 +385,9 @@ fun NoteListScreen(
                                 } catch (_: Exception) {
                                 }
                             }
-                        ) {
-                            Icon(Icons.Default.Share, contentDescription = "分享选中")
-                        }
-                        IconButton(
+                        )
+                        LuyuanIconButton(
+                            Icons.Filled.AutoAwesome, "整理合并",
                             enabled = selected.size >= 2,
                             onClick = {
                                 // 一键整理：合并选中笔记为一条（原笔记进回收站可恢复）
@@ -380,40 +395,29 @@ fun NoteListScreen(
                                 selected = emptySet()
                                 selecting = false
                             }
-                        ) {
-                            Icon(Icons.Filled.AutoAwesome, contentDescription = "整理合并")
-                        }
-                        IconButton(
+                        )
+                        LuyuanIconButton(
+                            Icons.Default.Delete, "删除选中",
                             enabled = selected.isNotEmpty(),
+                            tint = LuyuanPalette.Red,
                             onClick = {
                                 vm.deleteMany(selected)
                                 selected = emptySet()
+                                selecting = false
                             }
-                        ) {
-                            Icon(Icons.Default.Delete, contentDescription = "删除选中")
+                        )
+                        LuyuanIconButton(Icons.Default.Close, "完成") {
+                            selecting = false
+                            selected = emptySet()
                         }
+                    } else {
+                        LuyuanIconButton(Icons.Default.Checklist, "多选") { selecting = true }
+                        LuyuanIconButton(
+                            Icons.Default.Mood, "心情时间线",
+                            tint = if (moodEnabled) LuyuanPalette.Green800 else LuyuanPalette.Ink2
+                        ) { vm.toggleMood() }
+                        LuyuanIconButton(Icons.Default.DeleteOutline, "回收站", onClick = onTrash)
                     }
-                    IconButton(onClick = {
-                        selecting = !selecting
-                        if (!selecting) selected = emptySet()
-                    }) {
-                        Icon(
-                            if (selecting) Icons.Default.Close else Icons.Default.Checklist,
-                            contentDescription = "多选"
-                        )
-                    }
-                    IconButton(onClick = { vm.toggleMood() }) {
-                        Icon(
-                            Icons.Default.Mood,
-                            contentDescription = "心情时间线开关",
-                            tint = if (moodEnabled) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    IconButton(onClick = onTrash) {
-                        Icon(Icons.Default.DeleteOutline, contentDescription = "回收站")
-                    }
-                    // 09-15 夜 IA 重排：待办升底栏一级页、问路远进胶囊、设置进底栏齿轮——顶栏从 6 枚瘦到 3 枚
                 }
             )
         }
@@ -450,24 +454,20 @@ fun NoteListScreen(
                         }
                     }
                 }
-                // 搜索态（视觉规范稿 search-and-overlay.html A）：绿描边胶囊 + 命中数徽章 + ✕ 一键清词
+                // 搜索态：纸面胶囊 + 命中数 + 一键清词（vc127 收边：1dp 发丝线代替 1.5dp 绿描边）
                 if (query.isNotBlank()) {
                     Row(
                         modifier = Modifier.fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 4.dp)
-                            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(999.dp))
-                            .border(
-                                1.5.dp,
-                                MaterialTheme.colorScheme.primary,
-                                RoundedCornerShape(999.dp)
-                            )
-                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                            .padding(horizontal = LuyuanSpace.gutter, vertical = 4.dp)
+                            .background(LuyuanPalette.Surface, LuyuanRadius.pillShape)
+                            .border(1.dp, LuyuanPalette.Line, LuyuanRadius.pillShape)
+                            .padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             Icons.Default.Search,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = LuyuanPalette.Ink3,
                             modifier = Modifier.size(15.dp)
                         )
                         Spacer(Modifier.size(9.dp))
@@ -475,36 +475,21 @@ fun NoteListScreen(
                             highlighted(query, query),
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = LuyuanColors.Ink1,
+                            color = LuyuanPalette.Ink1,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f)
                         )
                         Text(
-                            "命中 ${filtered.size} / ${notes.size}",
+                            "${filtered.size} 条",
                             fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.background(
-                                MaterialTheme.colorScheme.surfaceVariant,
-                                RoundedCornerShape(999.dp)
-                            ).padding(horizontal = 10.dp, vertical = 3.dp)
+                            color = LuyuanPalette.Ink3,
+                            modifier = Modifier
+                                .background(LuyuanPalette.Sunken, LuyuanRadius.pillShape)
+                                .padding(horizontal = 9.dp, vertical = 3.dp)
                         )
-                        Spacer(Modifier.size(8.dp))
-                        Box(
-                            modifier = Modifier.size(20.dp)
-                                .background(
-                                    MaterialTheme.colorScheme.surfaceVariant,
-                                    CircleShape
-                                )
-                                .clickable { vm.setSearchQuery("") },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.Close,
-                                contentDescription = "清空搜索",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(12.dp)
-                            )
+                        LuyuanIconButton(Icons.Default.Close, "清空搜索", size = 32.dp) {
+                            vm.setSearchQuery("")
                         }
                     }
                 }
@@ -520,11 +505,11 @@ fun NoteListScreen(
                     )
                 }
                 LazyColumn(
-                    contentPadding = PaddingValues(bottom = 96.dp),
+                    contentPadding = PaddingValues(bottom = 104.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxSize()
                         .offset { IntOffset(0, pullConn.overPull.roundToInt()) } // 皮筋跟手：顶端下拖时整列随指下移
-                        .padding(horizontal = 12.dp)
+                        .padding(horizontal = LuyuanSpace.gutter)
                         .padding(top = 4.dp)
                 ) {
                     for (g in groups) {
@@ -534,7 +519,7 @@ fun NoteListScreen(
                             val dayAllIn = selecting && dayIds.isNotEmpty() && dayIds.all { it in selected }
                             Row(
                                 modifier = Modifier
-                                    .padding(top = 10.dp, bottom = 2.dp)
+                                    .padding(start = 2.dp, top = 14.dp, bottom = 2.dp)
                                     .then(
                                         if (selecting) Modifier.clickable {
                                             selected = if (dayAllIn) selected - dayIds else selected + dayIds
@@ -544,23 +529,23 @@ fun NoteListScreen(
                             ) {
                                 Text(
                                     g.label,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = LuyuanColors.Ink2,
-                                    fontSize = 14.sp
+                                    fontWeight = FontWeight.Bold,
+                                    color = LuyuanPalette.Ink1,
+                                    fontSize = 15.sp
                                 )
-                                Spacer(Modifier.size(8.dp))
+                                Spacer(Modifier.size(7.dp))
                                 Text(
                                     "${g.notes.size} 条",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    fontSize = 11.sp,
+                                    color = LuyuanPalette.Ink3
                                 )
                                 if (selecting) {
-                                    Spacer(Modifier.size(8.dp))
+                                    Spacer(Modifier.size(10.dp))
                                     Text(
-                                        if (dayAllIn) "✓ 取消这天" else "选这一整天",
+                                        if (dayAllIn) "取消这天" else "选这一整天",
                                         fontSize = 12.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = LuyuanColors.Green700
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = LuyuanPalette.Green700
                                     )
                                 }
                             }
@@ -624,45 +609,35 @@ fun NoteListScreen(
 }
 
 @Composable
-private fun Badge(text: String, color: Color) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelSmall,
-        color = color,
-        modifier = Modifier
-            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
-            .padding(horizontal = 8.dp, vertical = 2.dp)
-    )
-}
-
-@Composable
 private fun MoodBar(notes: List<Note>) {
     val days = remember(notes) { moodByDay(notes) }
     if (days.all { it.second.isEmpty() }) return
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = LuyuanSpace.gutter, vertical = 4.dp)
+            .clip(LuyuanRadius.lgShape)
+            .background(LuyuanPalette.Surface)
+            .border(1.dp, LuyuanPalette.Line, LuyuanRadius.lgShape)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            for ((date, counts) in days) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        shortDayLabel(date),
-                        fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(moodSummary(counts), fontSize = 13.sp)
-                }
+        for ((date, counts) in days) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(shortDayLabel(date), fontSize = 10.sp, color = LuyuanPalette.Ink3)
+                Spacer(Modifier.height(2.dp))
+                Text(moodSummary(counts), fontSize = 13.sp, color = LuyuanPalette.Ink1)
             }
         }
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+/**
+ * 笔记卡（vc127）：纸面上一张更亮的纸，1dp 发丝边，无投影。
+ * 多选不再插入一行 Checkbox（会让整列瞬间跳 40dp），改成右上角 22dp 圆环覆盖层——布局零位移。
+ */
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun NoteCard(
     note: Note,
@@ -674,78 +649,100 @@ fun NoteCard(
     onToggleSelect: () -> Unit = {}
 ) {
     val (title, summary) = remember(note.text) { splitTitleSummary(note.text) }
-    Card(
-        shape = RoundedCornerShape(14.dp),
-        modifier = Modifier.fillMaxWidth().combinedClickable(
-            onClick = {
-                if (selecting) onToggleSelect() else onClick()
-            },
-            onLongClick = onLongClick
-        ),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(
-            1.dp,
-            if (isSelected) MaterialTheme.colorScheme.primary
-            else MaterialTheme.colorScheme.outline
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
-            if (selecting) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = isSelected, onCheckedChange = { onToggleSelect() })
-                    Text(
-                        if (isSelected) "已选择" else "选择",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+    val haptic = LocalHapticFeedback.current
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .clip(LuyuanRadius.lgShape)
+            .background(
+                if (isSelected) LuyuanPalette.Green50 else LuyuanPalette.Surface,
+                LuyuanRadius.lgShape
+            )
+            .border(
+                1.dp,
+                if (isSelected) LuyuanPalette.Green800 else LuyuanPalette.Line,
+                LuyuanRadius.lgShape
+            )
+            .combinedClickable(
+                onClick = { if (selecting) onToggleSelect() else onClick() },
+                onLongClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onLongClick()
                 }
-            }
+            )
+    ) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
             if (title.isNotEmpty()) {
                 Text(
                     text = highlighted(title, query),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    color = LuyuanColors.Ink1,
+                    style = LuyuanType.cardTitle,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(end = if (selecting) 28.dp else 0.dp)
                 )
             }
             if (summary.isNotEmpty()) {
                 Text(
                     text = highlighted(summary, query),
-                    color = LuyuanColors.Ink2,
-                    fontSize = 13.sp,
-                    lineHeight = 19.sp,
+                    style = LuyuanType.bodySmall,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 3.dp)
                 )
             }
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 7.dp)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(top = 9.dp)
+            ) {
+                FlowRow(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    // PC msgdigest 批（09-15 夜对齐）：通知总结笔记专属徽章（琥珀=通知·待办族）
+                    // 只挂「例外」：语音 / 待转写 / 原声 / 提醒 / 标签。
+                    // 「手动」是默认来源，每张卡都挂一个等于噪音，撤掉。
                     if (note.source == "msgdigest" || note.tags.any { it == "通知总结" }) {
-                        Badge("通知总结", LuyuanColors.Amber)
+                        LuyuanBadge("通知总结", LuyuanTone.Todo)
                     }
-                    Badge(
-                        if (note.source == "voice") "语音" else "手动",
-                        if (note.source == "voice") LuyuanColors.Blue else LuyuanColors.Green500
+                    if (note.source == "voice") LuyuanBadge("语音", LuyuanTone.Voice)
+                    if (note.transcribed == false) LuyuanBadge("待转写", LuyuanTone.Todo)
+                    if (note.audio != null && note.transcribed == true) {
+                        LuyuanBadge("原声", LuyuanTone.Manual)
+                    }
+                    remindBadge(note)
+                    for (t in note.tags.take(2)) LuyuanBadge(t, LuyuanTone.Neutral)
+                    val extra = note.tags.size - 2
+                    if (extra > 0) LuyuanBadge("+$extra", LuyuanTone.Neutral)
+                }
+                Spacer(Modifier.size(6.dp))
+                Text(formatTime(note.created_at), style = LuyuanType.caption)
+            }
+        }
+        if (selecting) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(10.dp)
+                    .size(22.dp)
+                    .background(
+                        if (isSelected) LuyuanPalette.Green800 else LuyuanPalette.Surface,
+                        CircleShape
                     )
-                if (note.device == "phone") Badge("手机", LuyuanColors.Ink3)
-                if (note.transcribed == false) Badge("待转写", LuyuanColors.Amber)
-                if (note.audio != null && note.transcribed == true) Badge("原声", LuyuanColors.Green500)
-                remindBadge(note)
-                for (t in note.tags.take(3)) Badge(t, LuyuanColors.Ink3)
-                Spacer(Modifier.size(2.dp))
-                Text(
-                    formatTime(note.created_at),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                    .border(
+                        1.5.dp,
+                        if (isSelected) LuyuanPalette.Green800 else LuyuanPalette.LineStrong,
+                        CircleShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isSelected) {
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = "已选择",
+                        tint = Color.White,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
             }
         }
     }
@@ -766,5 +763,5 @@ private fun remindBadge(note: Note) {
             ra // 兜底显示原文
         }
     }
-    Badge("$shown 提醒", LuyuanColors.Amber)
+    LuyuanBadge("$shown 提醒", LuyuanTone.Alert)
 }

@@ -34,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
@@ -53,6 +54,12 @@ import com.luyuan.platform.StorageLocator
 import com.luyuan.ui.CountUpText
 import com.luyuan.ui.LuyuanMotion
 import com.luyuan.ui.rememberPressScale
+import com.luyuan.ui.design.LuyuanIconButton
+import com.luyuan.ui.design.LuyuanPalette
+import com.luyuan.ui.design.LuyuanRadius
+import com.luyuan.ui.design.LuyuanSpace
+import com.luyuan.ui.design.LuyuanTopBar
+import com.luyuan.ui.design.LuyuanType
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import java.time.LocalDate
@@ -155,36 +162,24 @@ fun LedgerScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                ),
-                title = {
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Text("记账", fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "${month.monthValue}月 · ${monthExpenses.size}笔",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
+            // vc127：统一自绘头部，副题直接报「几月 · 几笔 · 多少钱」
+            LuyuanTopBar(
+                title = "记账",
+                subtitle = "${month.monthValue} 月 · ${monthExpenses.size} 笔 · ¥${fmtMoney(total)}",
                 actions = {
-                    // 09-15 路河：拒 emoji 图标 → Material（问路远=机器人 / 回收站=垃圾桶）
-                    IconButton(onClick = onAsk) { Icon(Icons.Default.SmartToy, contentDescription = "问路远") }
-                    IconButton(onClick = onTrash) { Icon(Icons.Default.Delete, contentDescription = "回收站") }
+                    LuyuanIconButton(Icons.Default.SmartToy, "问路远", onClick = onAsk)
+                    LuyuanIconButton(Icons.Default.Delete, "回收站", onClick = onTrash)
                 }
             )
         }
     ) { pad ->
         LazyColumn(
-            contentPadding = PaddingValues(bottom = 96.dp),
+            contentPadding = PaddingValues(bottom = 104.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier
                 .fillMaxSize()
                 .padding(pad)
-                .padding(horizontal = 14.dp)
+                .padding(horizontal = LuyuanSpace.gutter)
         ) {
             // ① 通知自动记账 · 待确认区（样式对齐 ledger-extras.html：琥珀左边条 + ✓入账/✕丢弃）
             if (!listenerOn) {
@@ -215,51 +210,66 @@ fun LedgerScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit) {
 
             if (expenses.isEmpty() && pending.isEmpty()) {
                 item { LedgerEmpty() }
-            }
-
-            // 月份 chips + 同步小字
-            item {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                        for (m in months) {
-                            // vc124 视觉对齐：迁入 LuyuanSeg 单源规格（原 primary 绿与品牌绿深浅不一，一并归一）
-                            LuyuanSeg("${m.monthValue}月", active = m == month) { month = m }
+            } else if (expenses.isNotEmpty()) {
+                // 月份 chips + 同步小字
+                item {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                            for (m in months) {
+                                // vc124 视觉对齐：迁入 LuyuanSeg 单源规格
+                                LuyuanSeg("${m.monthValue}月", active = m == month) { month = m }
+                            }
                         }
-                    }
-                    Spacer(Modifier.weight(1f))
-                    Text(
-                        "电脑端自动同步✓",
-                        fontSize = 10.5.sp,
-                        color = LuyuanColors.Ink3
-                    )
-                }
-            }
-
-            // 深绿统计卡
-            item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            Brush.linearGradient(
-                                listOf(LuyuanColors.GradGreenStart, LuyuanColors.GradGreenEnd)
-                            ),
-                            RoundedCornerShape(22.dp)
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            "电脑端同步",
+                            fontSize = 10.5.sp,
+                            color = LuyuanPalette.Ink3
                         )
-                        .padding(20.dp)
-                ) {
-                    Text("本月支出", fontSize = 12.sp, color = Color(0xFFCFE0D6))
-                    CountUpText(
-                        target = total,
-                        format = { "¥" + fmtMoney(it) },
-                        style = androidx.compose.ui.text.TextStyle(fontSize = 40.sp, fontWeight = FontWeight.Bold),
-                        color = Color.White
-                    )
-                    Text(
-                        "${month.monthValue}月共 ${monthExpenses.size} 笔",
-                        fontSize = 12.sp,
-                        color = Color(0xFFCFE0D6)
-                    )
+                    }
+                }
+
+                // 统计卡（vc127：圆角并到 20 档，数字 30sp；左上一条 18dp 金线是整屏唯一的金）
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(LuyuanColors.GradGreenStart, LuyuanColors.GradGreenEnd)
+                                ),
+                                LuyuanRadius.xlShape
+                            )
+                            .padding(horizontal = 20.dp, vertical = 18.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                Modifier
+                                    .width(16.dp)
+                                    .height(2.dp)
+                                    .background(LuyuanPalette.Gold, RoundedCornerShape(999.dp))
+                            )
+                            Spacer(Modifier.width(7.dp))
+                            Text("本月支出", fontSize = 12.sp, color = Color(0xFFD6E4DB))
+                            Spacer(Modifier.weight(1f))
+                            Text(
+                                "${month.monthValue} 月 · ${monthExpenses.size} 笔",
+                                fontSize = 11.5.sp,
+                                color = Color(0xFFAFC6BA)
+                            )
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        CountUpText(
+                            target = total,
+                            format = { "¥" + fmtMoney(it) },
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontSize = 30.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFeatureSettings = "tnum"
+                            ),
+                            color = Color.White
+                        )
+                    }
                 }
             }
 
@@ -338,50 +348,58 @@ fun LedgerScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit) {
 @Composable
 private fun ExpenseRow(e: Expense) {
     val cat = e.category.ifBlank { "其他" }
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = RoundedCornerShape(14.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(LuyuanRadius.lgShape)
+            .background(LuyuanPalette.Surface, LuyuanRadius.lgShape)
+            .border(1.dp, LuyuanPalette.Line, LuyuanRadius.lgShape)
+            .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp)
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(34.dp)
+                .background(LuyuanColors.categoryBg(cat), LuyuanRadius.mdShape)
         ) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(36.dp)
-                    .background(LuyuanColors.categoryBg(cat), RoundedCornerShape(10.dp))
-            ) {
-                Icon(catIcon(cat), contentDescription = null, modifier = Modifier.size(18.dp))
-            }
-            Spacer(Modifier.width(10.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    e.item.ifBlank { "（无名目）" },
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    maxLines = 1
-                )
-                Text(
-                    buildString {
-                        append(cat)
-                        if (e.source.isNotBlank()) {
-                            append(" · ")
-                            append(if (e.source == "screenshot") "截图识别" else "手动")
-                        }
-                    },
-                    fontSize = 11.sp,
-                    color = LuyuanColors.Ink3
-                )
-            }
-            Text(
-                "-" + fmtMoney(e.amount),
-                fontWeight = FontWeight.Bold,
-                fontSize = 15.sp,
-                fontFamily = FontFamily.Monospace
+            Icon(
+                catIcon(cat),
+                contentDescription = null,
+                tint = LuyuanColors.categoryColor(cat),
+                modifier = Modifier.size(17.dp)
             )
         }
+        Spacer(Modifier.width(11.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                e.item.ifBlank { "（无名目）" },
+                fontWeight = FontWeight.Medium,
+                fontSize = 14.5.sp,
+                color = LuyuanPalette.Ink1,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(1.dp))
+            Text(
+                buildString {
+                    append(cat)
+                    if (e.source.isNotBlank()) {
+                        append(" · ")
+                        append(if (e.source == "screenshot") "截图识别" else "手动")
+                    }
+                },
+                fontSize = 11.sp,
+                color = LuyuanPalette.Ink3
+            )
+        }
+        Text(
+            "-" + fmtMoney(e.amount),
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = LuyuanPalette.Ink1,
+            style = LuyuanType.numSmall.copy(fontSize = 15.sp)
+        )
     }
 }
 
@@ -390,7 +408,7 @@ private fun LedgerEmpty() {
     EmptyState(
         icon = EmptyIconLedger,
         title = "还没有账单",
-        subtitle = "电脑端截图识别 / 手动补记的账，会自动同步到这里"
+        subtitle = "点下面的胶囊记一笔，或在电脑端截图 / 点支付通知，\n会自动收进「待确认」。"
     )
 }
 

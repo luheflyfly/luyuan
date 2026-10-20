@@ -93,6 +93,12 @@ import com.luyuan.platform.ScanRecord
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.luyuan.ui.design.LuyuanIconButton
+import com.luyuan.ui.design.LuyuanPalette
+import com.luyuan.ui.design.LuyuanRadius
+import com.luyuan.ui.design.LuyuanSpace
+import com.luyuan.ui.design.LuyuanTopBar
+import com.luyuan.ui.design.LuyuanType
 
 /**
  * 学业页（vc85 改名，原「课程」）· 木案网格版（B5，2026-09-13 按.ui-mobile/v2/course-muan.html 施工）：
@@ -310,37 +316,24 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                ),
-                title = {
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Text("学业", fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "第 $week 周 · ${weekCourses.size}节",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
+            // vc127：统一自绘头部（24sp 标题 + 一行副题）
+            LuyuanTopBar(
+                title = "学业",
+                subtitle = "第 $week 周 · ${weekCourses.size} 节",
                 actions = {
-                    // vc85：原「⤓ 导入课表」占位撤除——PC 课务导出已自动同步，无需提示跳转
-                    // 09-15 路河：拒 emoji 图标 → Material（问路远=机器人 / 回收站=垃圾桶）
-                    IconButton(onClick = onAsk) { Icon(Icons.Default.SmartToy, contentDescription = "问路远") }
-                    IconButton(onClick = onTrash) { Icon(Icons.Default.Delete, contentDescription = "回收站") }
+                    LuyuanIconButton(Icons.Default.SmartToy, "问路远", onClick = onAsk)
+                    LuyuanIconButton(Icons.Default.Delete, "回收站", onClick = onTrash)
                 }
             )
         }
     ) { pad ->
         LazyColumn(
-            contentPadding = PaddingValues(bottom = 96.dp),
+            contentPadding = PaddingValues(bottom = 104.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier
                 .fillMaxSize()
                 .padding(pad)
-                .padding(horizontal = 14.dp)
+                .padding(horizontal = LuyuanSpace.gutter)
         ) {
             // vc85 hub 分段：课表 / 校历 / 成绩 / 速查（四视图一页一滚动容器）
             item(key = "seg_tabs") { SegTabs(seg) { seg = it } }
@@ -693,7 +686,7 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                 }
                 item(key = "grid_hint") {
                     Text(
-                        "单堂课占半格；空格子点「＋」可加课。",
+                        "空格子点「＋」加课。",
                         fontSize = 9.5.sp, color = LuyuanColors.Ink4,
                         modifier = Modifier.padding(start = 2.dp)
                     )
