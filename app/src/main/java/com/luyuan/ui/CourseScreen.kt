@@ -5,6 +5,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -205,7 +206,7 @@ private const val TANG_H = 32           // 一小堂高度
 /** 点空格子加课的槽位（列=星期几，行=节次时间） */
 private data class AddSlot(val weekday: Int, val start: String, val end: String)
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, onDetail: (String) -> Unit = {}) {
     val courses by vm.courses.collectAsStateWithLifecycle()
@@ -336,7 +337,15 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
                 .padding(horizontal = LuyuanSpace.gutter)
         ) {
             // vc85 hub 分段：课表 / 校历 / 成绩 / 速查（四视图一页一滚动容器）
-            item(key = "seg_tabs") { SegTabs(seg) { seg = it } }
+            // vc127：改 stickyHeader——长页滚到课表中段也能直接切视图，不用先滚回顶部
+            stickyHeader(key = "seg_tabs") {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.background)
+                        .padding(vertical = 4.dp)
+                ) { SegTabs(seg) { seg = it } }
+            }
 
             if (seg == 1) {
                 // vc87 日程段：作业截止 + 校历事件合并时间线（路河「截止日期和开始日期单开一页」）

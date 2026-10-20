@@ -216,23 +216,11 @@ fun JournalScreen(vm: LuyuanViewModel, onRecord: () -> Unit, onReview: () -> Uni
                                 fontSize = 14.sp, fontWeight = FontWeight.Bold, color = LuyuanColors.Green700
                             )
                             Text(" · 今天", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.weight(1f))
-                            Text(
-                                if (streak > 0) "连续 $streak 天" else "从今天开始",
-                                fontSize = 12.sp, fontWeight = FontWeight.Bold, color = LuyuanColors.Amber
-                            )
-                                Spacer(Modifier.width(3.dp))
-                                Icon(
-                                    Icons.Default.Whatshot,
-                                    contentDescription = null,
-                                    tint = LuyuanColors.Amber,
-                                    modifier = Modifier.size(14.dp)
-                                )
                         }
                         if (savedAt.isNotBlank()) {
                             Text(
                                 "已自动保存 · $savedAt",
-                                fontSize = 9.sp, color = LuyuanColors.Ink4,
+                                fontSize = 10.5.sp, color = LuyuanColors.Ink3,
                                 modifier = Modifier.align(Alignment.TopEnd)
                             )
                         }
