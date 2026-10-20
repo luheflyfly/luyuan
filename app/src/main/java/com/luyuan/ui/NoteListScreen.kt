@@ -79,6 +79,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -584,25 +585,26 @@ fun NoteListScreen(
                     }
                 }
             }
-            if (pullConn.overPull > 2f) {
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shadowElevation = 6.dp,
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .offset {
-                            IntOffset(
-                                0,
-                                (pullConn.overPull - indicatorSizePx).roundToInt().coerceAtLeast(0)
-                            )
-                        }
-                ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.padding(8.dp).size(28.dp),
-                        strokeWidth = 3.dp
-                    )
-                }
+            // 下拉指示器常驻，位移/透明度在 layer 里读（原写法在组合里读 overPull，拖一帧重组整个列表）
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shadowElevation = 6.dp,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .graphicsLayer {
+                        val p = pullConn.overPull
+                        translationY = (p - indicatorSizePx).coerceAtLeast(0f)
+                        alpha = if (p > 2f) 1f else 0f
+                        val s = (p / indicatorSizePx).coerceIn(0f, 1f)
+                        scaleX = 0.6f + 0.4f * s
+                        scaleY = 0.6f + 0.4f * s
+                    }
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.padding(8.dp).size(28.dp),
+                    strokeWidth = 3.dp
+                )
             }
         }
     }
