@@ -189,12 +189,25 @@ fun AppRoot(startDest: String) {
     // 旧写法在组合里给 mutableIntStateOf 赋值（side-effect in composition），页数增减当帧可能读到旧值。
     val pagerState = rememberPagerState(initialPage = 0) { tabs.size }
     // 底栏开关增减页数时，按「页面槽位 id」把当前页搬到新序号——否则 index 3 会从日记悄悄变成记账。
-    // 读 currentPage 必须在协程里（vc123 纪律：组合作用域不读会变的页码）。
+    // 读 currentPage 必须在协程里（vc123 纪律：组合作用域不读会变的页码）；tabs 用 rememberUpdatedState
+    // 拿最新值，否则常驻协程会一直抱着初次组合的列表。
+    val lastSlot = androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(-1) }
+    val lastPage = androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    val tabsNow = androidx.compose.runtime.rememberUpdatedState(tabs)
+    LaunchedEffect(Unit) {
+        snapshotFlow { pagerState.currentPage }.collect { p ->
+            lastPage.intValue = p
+            tabsNow.value.getOrNull(p)?.let { lastSlot.intValue = it.first }
+        }
+    }
     LaunchedEffect(visibleSlots) {
-        val slot = tabs.getOrNull(pagerState.currentPage)?.first ?: return@LaunchedEffect
-        val target = tabs.indexOfFirst { it.first == slot }
-        if (target >= 0 && target != pagerState.currentPage) {
-            runCatching { pagerState.scrollToPage(target) }
+        if (lastSlot.intValue < 0) return@LaunchedEffect
+        val target = tabs.indexOfFirst { it.first == lastSlot.intValue }
+        // 当前页被关掉（如路远远）→ 退到最近的有效页，别停在越界索引
+        val safe = if (target >= 0) target
+        else lastPage.intValue.coerceIn(0, tabs.lastIndex.coerceAtLeast(0))
+        if (safe != pagerState.currentPage) {
+            runCatching { pagerState.scrollToPage(safe) }
         }
     }
     var searchMode by remember { mutableStateOf(false) }
