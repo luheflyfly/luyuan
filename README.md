@@ -1,67 +1,104 @@
 # 路远 · 安卓 App（Luyuan for Android）
 
-去中心化、离线优先的本地语音记事 App。手机端独立录音 + **本地语音识别**（Vosk，不依赖电脑），
-记事按 [`SYNC_FORMAT`](https://github.com/luheflyfly/1) 存 JSON，靠系统 **Syncthing** 与电脑端双向同步。
-**电脑开不开都不影响手机端使用。**
+[![Build APK](https://github.com/luheflyfly/luyuan/actions/workflows/build.yml/badge.svg)](https://github.com/luheflyfly/luyuan/actions/workflows/build.yml)
+[![Release](https://img.shields.io/github/v/release/luheflyfly/luyuan?label=release)](https://github.com/luheflyfly/luyuan/releases)
+[![License](https://img.shields.io/github/license/luheflyfly/luyuan?label=license)](LICENSE)
 
-> 电脑端「路远」项目位于 `D:\Luyuan`，本仓库仅含手机端 App 源码与自动编译配置。
+去中心化、离线优先的个人语音记事与日程 App。
+
+录音在**本机**转写（sherpa-onnx zipformer，不外传）；记事存成 JSON 放在 Syncthing 共享目录，与电脑端「路远」双向同步——**电脑开不开都不影响手机端使用**。
+
+- 当前版本：**v1.52.0（versionCode 131）**
+- 平台：Android 8.0+（minSdk 26 / targetSdk 34），只打 **arm64-v8a**
+- 技术栈：Kotlin · Jetpack Compose · Material3
+
+> 电脑端项目在本地 `D:\Luyuan`（未开源）；本仓库只含**手机端 App 源码 + 自动编译配置**。
 
 ---
 
-## 功能（v0.1）
+## 一、现在做到哪
 
-- 📝 手动打字记一笔（列表页右下「+」）
-- 🎙 录音 → **本地转写** → 存文本 + 音频文件（`audio/<id>.wav`）
-- 📋 清单式浏览：正文 / 来源徽章（语音·手动）/ 设备（手机）/ 时间
-- 🔍 列表内即时搜索（正文 + 标签）
-- ✏️ 详情页行内编辑、软删（不物理删文件）
-- 🔄 离线优先：无网照用，联网后 Syncthing 自动同步
-- ⚙️ 设置：共享目录名、权限引导
+一套自绘的「纸墨」设计系统 + 七个常驻页签，加上若干独立页面：
 
-## 架构
+| 页签 | 做什么 |
+|---|---|
+| 笔记 | 手动记 / 录音转写 / 来源徽章 / 列表内即时搜索 / 详情行内编辑 / 软删进回收站 |
+| 待办 | 提醒 chips（不提醒·15 分·30 分·1 时·2 时·1 天）、详情页全文与 OCR 原文可复制、自动补提醒兜底 |
+| 记账 | 粘贴导入、待确认支出、按日汇总 |
+| 日记 | 连续天数、按日回看 |
+| 课表 | 学期分段（按日期切）、stickyHeader 中段切视图不丢位置 |
+| 人脉 | 通讯录归类、群发与备注 |
+| 路远远 | 未读在上、全文可复制、点开即标已读、可删除 |
+
+独立页面：录音、详情编辑、回收站、复盘（Review）、问答（Ask / Ask 密钥）、引导（Onboarding）、设置。
+
+## 二、能力清单
+
+**记录与识别**
+- 录音 → 本地流式识别 → 存文本 + `audio/<id>.wav`；识别失败可从录音抢救（RecordingRescue）
+- 识别模型：`sherpa-onnx-streaming-zipformer-small-ctc-zh-int8`（25MB，实测优于 62MB 的 transducer，勿回退大模型）
+
+**今天与提醒**
+- 课表、课前提醒、天气一句话、周报；调度器统一接管（不再用 `while True` 轮询）
+- 自动闹钟：到点自动排程，改完即重排
+
+**与电脑端的两条线**
+- **文件线**：Syncthing + JSON（离线优先，冲突按 SyncPolicy 处理）
+- **问答线**：北极星提问 → 手机**通知带按钮** → 点一下直接作答并回报（不打开 App）
+
+**通知收件箱（vc131 新增）**
+- 开关默认开；最近 20 条已通知 id 做去重表（同一条问题只弹一次）
+- 点按先撤通知再回传，弱网也不卡界面
+
+**位置上报（vc131 新增）**
+- 前台服务按间隔上报，接收地址默认 `8787`（旧系统占 8777；切流后改设置页即可，不用重装）
+
+**别人的消息也能接**
+- 通知监听 → 关键词规则 → 待办提取（MessageNotificationListener / MessageKeywordRules / MessageBuffer 去重）
+
+**悬浮岛 / 终端胶囊**
+- 单窗常驻 + 显式 measure + 热替换；姿势在 `island-demo` 仓库单独验证过
+
+## 三、架构
 
 ```
-┌──────────────────── Android App（路远）────────────────────┐
-│ UI(Compose) │ 领域层(Note) │ 数据层(JSON/录音/STT) │ 平台层(前台服务/权限) │
-└───────────────────────────┬───────────────────────────────┘
-                              │ 读写 notes/*.json + audio/*.wav
-                              ▼
-                 /storage/emulated/0/Luyuan/
-                              │  Syncthing P2P（端到端加密，仅搬文件）
-                              ▼
-                 D:\Luyuan\data\notes\（电脑端，同结构）
+app/src/main/java/com/luyuan/
+├── MainActivity.kt            单 Activity 宿主 + 导航骨架
+├── ui/                        23 个：七个页签 + 详情/录音/回收站/复盘/问答 + 设计系统(theme, Seg, UndoBar)
+├── domain/                    4 个：Note / Semester / SyncPolicy / ChineseDue（"下周三"这类中文日期解析）
+├── data/                      22 个：仓储与设置（Note/Todo/Report/Contact/Keiwu）、录音、离线识别、通知与位置设置
+└── platform/                  20 个：通知监听、悬浮岛、前台服务、崩溃日志、权限引导、收件箱通知与按钮
 ```
 
-两端说同一种数据契约，详见 `D:\Luyuan\SYNC_FORMAT.md`。
+数据侧只碰三样：**Syncthing 目录里的 JSON**、**App 私有 SharedPreferences（只存开关与去重表）**、**录音文件**。没有服务端、没有账号、没有遥测。
 
-## 构建（无需本地装 Android SDK）
+## 四、构建
 
-推送 `main` 分支后，GitHub Actions 自动编译并产出 `app-debug.apk`：
+**云端（推荐）**：push 到 `main` 即触发 [Build APK](.github/workflows/build.yml)，产物在 Actions 的 `app-debug` artifact（保留 5 天）；正式包挂在 [Releases](https://github.com/luheflyfly/luyuan/releases)。
 
-1. Fork / 直接用本仓库 `luheflyfly/1`
-2. `git push` 到 `main`
-3. 仓库 **Actions** 页 → 最新运行 → **Artifacts** → 下载 `app-debug`
-4. 解压得到 `app-debug.apk`
+**本地**：
 
-（如需 release 签名包，后续再加 signing 步骤。）
+```bash
+# 需要 JDK 17 + Android SDK 34；local.properties 里写 sdk.dir
+gradle testDebugUnitTest assembleDebug --no-daemon
+# 产物：app/build/outputs/apk/debug/app-debug.apk
+```
 
-## 安装与使用
+CI 已踩过的坑写在 workflow 注释里（runner 镜像的 sdkmanager 报错、GitHub cache service 故障改直连 Gradle 发行包），改动前先读那几段注释。
 
-1. 手机「设置 → 关于手机 → 连续点击版本号」开启开发者模式，允许「未知来源应用」安装
-2. 装好 `app-debug.apk`
-3. 首次打开授予 **麦克风** 权限
-4. 设置页点「去开启所有文件访问」→ 授予（Android 11+ 必须，才能读写 Syncthing 共享目录）
-5. 安装并配置 **Syncthing**（手机端 App），将手机上的 `Luyuan/` 目录与电脑端 `D:\Luyuan\data` 配对共享
-6. 首次录音会联网下载中文模型（约 40MB），之后完全离线
+## 五、版本节奏
 
-## 注意
+一版一个 `vcNNN`，commit message 即变更单。最近几版：
 
-- **本地识别模型**：Vosk 中文小模型首次需联网下载一次，存于应用私有目录，之后离线可用。
-  若下载失败，App 仍可用，只是录音只存音频、文本留空（后续可在电脑端转写）。
-- **所有文件访问权限**（`MANAGE_EXTERNAL_STORAGE`）：因侧载应用需直接读写 Syncthing 共享目录，
-  本 App 申请该权限；如不想授予，可在 Syncthing 中将共享目录改到应用专属目录（需改 `StorageLocator`）。
-- 软删：删除不物理删文件，仅标记 `deleted:true`，彻底清除请手动删除 JSON 文件。
+| 版本 | 内容 |
+|---|---|
+| vc122 / 1.45.0 | 待办详情页 + 提醒兜底 |
+| vc123 / 1.46.0 | 切页顺滑：页码读取移出组合、读盘下后台线程 |
+| vc124 / 1.47.0 | 层级与视觉对齐批 |
+| vc125 / 1.48.0 | 「路远远」汇报页（底栏第七槽 + 红点） |
+| vc127 / 1.49.0 | 前端重做：纸墨令牌 + 自绘底栏/头部/抽屉 + 分层动效 |
+| **vc131 / 1.52.0** | **通知收件箱（按钮作答）+ 位置上报 + 离线识别换 zipformer；补齐 128–130 未推改动** |
 
-## 技术栈
+## 六、许可
 
-Kotlin · Jetpack Compose (Material3) · Vosk（本地 STT）· 原生 AudioRecord/WAV · ForegroundService
+[MIT](LICENSE) © 2026 luheflyfly（路河）
