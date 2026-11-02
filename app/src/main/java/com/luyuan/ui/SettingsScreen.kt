@@ -57,7 +57,9 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.luyuan.BuildConfig
 import com.luyuan.data.AskRemote
+import com.luyuan.data.InboxSettings
 import com.luyuan.data.IslandSettings
+import com.luyuan.data.LocationSettings
 import com.luyuan.data.MessageKeywordRules
 import com.luyuan.data.MessageSettings
 import com.luyuan.data.NoteRepository
@@ -352,6 +354,12 @@ fun SettingsScreen(vm: LuyuanViewModel, onBack: () -> Unit, onAsk: () -> Unit = 
             // ---------- 🏝 灵动岛悬浮胶囊（vc111 路河派单：挖孔旁轻提示） ----------
             IslandCard()
 
+            // ---------- 📍 位置共享（vc130 路河派单：实时位置上报北极星） ----------
+            LocationCard()
+
+            // ---------- 🔔 消息通知（vc131 路河派单：北极星提问 → 通知按钮 → 回答） ----------
+            InboxCard()
+
             // ---------- 📱 vivo 保活指引（v1.12）：提醒/通知失灵的自查路径 ----------
             KeepAliveCard()
 
@@ -366,6 +374,226 @@ fun SettingsScreen(vm: LuyuanViewModel, onBack: () -> Unit, onAsk: () -> Unit = 
                 )
             }
         }
+    }
+}
+
+/**
+ * vc130「位置共享」设置卡（2026-11-01 路河派单：把实时位置上报给北极星）。
+ *
+ * 界面只做四件事，每件都要求"所见即所得"：
+ *  1. 开关：拨开=立刻起服务（没权限先弹授权），拨关=立刻停服务，不留后台驻留
+ *  2. 接收地址：可改（默认 Tailscale 上 PC 的那台），改完下一次上报即生效
+ *  3. 状态：上次成功上报的时间 / 最近失败原因 —— 直接摊在卡上，不弹窗
+ *  4. 说明：数据去了哪、怎么彻底关掉
+ */
+@Composable
+private fun LocationCard() {
+    val context = LocalContext.current
+    var on by remember { mutableStateOf(LocationSettings.enabled(context)) }
+    var base by remember { mutableStateOf(LocationSettings.baseUrl(context)) }
+    var lastOk by remember { mutableStateOf(LocationSettings.lastOkMs(context)) }
+    var lastErr by remember { mutableStateOf(LocationSettings.lastErr(context)) }
+    var sent by remember { mutableStateOf(LocationSettings.sentCount(context)) }
+    var editing by remember { mutableStateOf(false) }
+
+    val permLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+    ) { _ ->
+        if (com.luyuan.platform.LocationReporterService.hasLocationPermission(context)) {
+            com.luyuan.platform.LocationReporterService.start(context)
+        }
+        lastErr = if (com.luyuan.platform.LocationReporterService.hasLocationPermission(context))
+            "" else "没给定位权限，取不到坐标"
+    }
+
+    // 每 3 秒刷一次状态（服务在后台跑，组合不会自己重组）
+    LaunchedEffect(on) {
+        while (true) {
+            lastOk = LocationSettings.lastOkMs(context)
+            lastErr = LocationSettings.lastErr(context)
+            sent = LocationSettings.sentCount(context)
+            kotlinx.coroutines.delay(3000)
+        }
+    }
+
+    val fmt = remember { java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.CHINA) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(16.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text("位置共享", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(
+            "每 5 分钟（或移动超过 100 米）把当前坐标报给你的北极星电脑，只存在你自己电脑的 " +
+                "data/state/ 里，不上传任何第三方。\n" +
+                "开着时通知栏常驻「路远正在记录位置」，点那条通知的「关闭」即可立刻停止。",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("开启位置共享", fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f))
+            Switch(
+                checked = on,
+                onCheckedChange = { want ->
+                    on = want
+                    if (want) {
+                        if (com.luyuan.platform.LocationReporterService.hasLocationPermission(context)) {
+                            com.luyuan.platform.LocationReporterService.applySwitch(context, true)
+                        } else {
+                            LocationSettings.setEnabled(context, true)
+                            permLauncher.launch(
+                                arrayOf(
+                                    android.Manifest.permission.ACCESS_FINE_LOCATION,
+                                    android.Manifest.permission.ACCESS_COARSE_LOCATION,
+                                    android.Manifest.permission.POST_NOTIFICATIONS
+                                )
+                            )
+                        }
+                    } else {
+                        com.luyuan.platform.LocationReporterService.applySwitch(context, false)
+                        lastErr = ""
+                    }
+                }
+            )
+        }
+        Text(
+            when {
+                !on -> "已关闭：不会取位置，也不会发任何请求"
+                lastOk == 0L && lastErr.isBlank() -> "已开启，正在取第一个点…"
+                lastOk == 0L -> "已开启，但还没成功上报：$lastErr"
+                else -> "上次上报 ${fmt.format(java.util.Date(lastOk))} · 累计 $sent 条" +
+                    (if (lastErr.isNotBlank()) " · 最近失败：$lastErr" else "")
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = if (lastErr.isNotBlank() && on) MaterialTheme.colorScheme.error
+            else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (editing) {
+            OutlinedTextField(
+                value = base,
+                onValueChange = { base = it },
+                label = { Text("接收地址 host:port", fontSize = 12.sp) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = {
+                    LocationSettings.setBaseUrl(context, base)
+                    editing = false
+                    lastErr = ""
+                    com.luyuan.platform.LocationReporterService.stop(context)
+                    if (LocationSettings.enabled(context)) {
+                        com.luyuan.platform.LocationReporterService.start(context)
+                    }
+                }) { Text("保存") }
+                Button(onClick = {
+                    base = LocationSettings.baseUrl(context)
+                    editing = false
+                }) { Text("取消") }
+            }
+        } else {
+            Text(
+                "接收地址：${LocationSettings.endpoint(context)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                "改地址", fontSize = 12.sp, fontWeight = FontWeight.Medium,
+                color = LuyuanPalette.Green700,
+                modifier = Modifier.clickable { editing = true }
+            )
+        }
+    }
+}
+
+/**
+ * vc131「消息通知」开关（2026-11-02 路河派单：北极星问一句 → 系统通知带按钮 → 点一下就是回答）。
+ *
+ * 界面只做三件事：
+ *  1. 开关（**默认开**）：关掉 = 不再拉、不再弹；打开 = 立刻拉一次，不用等到下一个 5 分钟
+ *  2. 说清它靠谁跑：跟随「位置共享」那个前台服务，每 5 分钟顺手拉一次（不新建网络栈）
+ *  3. 通知权限没给就直接说去哪开（vivo：设置 → 应用 → 路远 → 通知），不弹错误对话框
+ */
+@Composable
+private fun InboxCard() {
+    val context = LocalContext.current
+    var on by remember { mutableStateOf(InboxSettings.enabled(context)) }
+    var notiOk by remember {
+        mutableStateOf(
+            androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()
+        )
+    }
+    var seen by remember { mutableStateOf(InboxSettings.notifiedIds(context).size) }
+    var locOn by remember { mutableStateOf(LocationSettings.enabled(context)) }
+
+    val notiPerm = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        notiOk = granted ||
+            androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()
+        if (granted) com.luyuan.platform.InboxNotifier.poll(context)
+    }
+
+    // 每 3 秒刷一次状态（服务在后台跑，组合不会自己重组）
+    LaunchedEffect(on) {
+        while (true) {
+            notiOk = androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()
+            seen = InboxSettings.notifiedIds(context).size
+            locOn = LocationSettings.enabled(context)
+            kotlinx.coroutines.delay(3000)
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(16.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text("消息通知", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(
+            "北极星要你拍板的事（比如中午食堂还是外卖）会用系统通知弹出来，上面直接挂着选项按钮：" +
+                "点「食堂」就算答完，不用开 App，通知自己消失。\n" +
+                "每 5 分钟从「位置共享」里那个接收地址拉一次；断网或电脑没开机就静默跳过，不弹错误。",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("接收北极星提问（通知带按钮）", fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f))
+            Switch(
+                checked = on,
+                onCheckedChange = { want ->
+                    on = want
+                    InboxSettings.setEnabled(context, want)
+                    if (want) {
+                        if (android.os.Build.VERSION.SDK_INT >= 33 && !notiOk) {
+                            notiPerm.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            com.luyuan.platform.InboxNotifier.poll(context)
+                        }
+                    }
+                }
+            )
+        }
+        Text(
+            when {
+                !on -> "已关闭：不拉取，也不会弹任何通知"
+                !notiOk -> "系统通知权限没开：设置 → 应用 → 路远 → 通知，打开后才会弹"
+                !locOn -> "已开启，但「位置共享」关着 → 后台服务没在跑，通知也跟着停（把上面那张卡打开）"
+                else -> "已开启，跟着「位置共享」服务每 5 分钟拉一次 · 已通知 $seen 条（去重表上限 20）"
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = if (on && !notiOk) MaterialTheme.colorScheme.error
+            else MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

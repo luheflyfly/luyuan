@@ -408,7 +408,7 @@ private fun LedgerEmpty() {
     EmptyState(
         icon = EmptyIconLedger,
         title = "还没有账单",
-        subtitle = "点下面的胶囊记一笔，或在电脑端截图 / 点支付通知，\n会自动收进「待确认」。"
+        subtitle = "电脑端截图、或手机的支付通知，\n会自动收进「待确认」等你点头。"
     )
 }
 

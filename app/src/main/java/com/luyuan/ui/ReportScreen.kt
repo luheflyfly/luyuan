@@ -173,7 +173,7 @@ fun ReportScreen(onBack: () -> Unit, embedded: Boolean = false) {
                             start = LuyuanSpace.gutter,
                             end = LuyuanSpace.gutter,
                             top = 2.dp,
-                            bottom = 104.dp
+                            bottom = 76.dp
                         ),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
@@ -243,12 +243,22 @@ fun ReportScreen(onBack: () -> Unit, embedded: Boolean = false) {
     }
 }
 
-private val TIME_FMT = DateTimeFormatter.ofPattern("MM/dd HH:mm")
+private val TIME_FMT = DateTimeFormatter.ofPattern("HH:mm")
 
-private fun fmtWhen(iso: String): String = try {
-    OffsetDateTime.parse(iso).format(TIME_FMT)
-} catch (_: Exception) {
-    iso.take(16).replace("T", " ")
+/* 2026-10-29 复查：原来固定 "10/27 17:44"，和笔记页的「今天/昨天/周X」两套写法。
+   统一成微信式：今天只给时:分，昨天带前缀，今年只给月日。 */
+private fun fmtWhen(iso: String): String {
+    val dt = runCatching { OffsetDateTime.parse(iso).toLocalDateTime() }
+        .recoverCatching { java.time.LocalDateTime.parse(iso) }
+        .getOrNull() ?: return iso.take(16).replace("T", " ")
+    val now = java.time.LocalDateTime.now()
+    val hm = dt.format(TIME_FMT)
+    return when {
+        dt.toLocalDate() == now.toLocalDate() -> hm
+        dt.toLocalDate() == now.toLocalDate().minusDays(1) -> "昨天 $hm"
+        dt.year == now.year -> "${dt.monthValue}月${dt.dayOfMonth}日 $hm"
+        else -> "${dt.year}年${dt.monthValue}月${dt.dayOfMonth}日"
+    }
 }
 
 @Composable
@@ -293,14 +303,6 @@ private fun ReportRow(
                 Spacer(Modifier.width(7.dp))
                 Text(fmtWhen(r.created_at), style = LuyuanType.caption)
                 Spacer(Modifier.weight(1f))
-                if (!r.read) {
-                    Box(
-                        Modifier
-                            .size(6.dp)
-                            .background(LuyuanPalette.Green700, CircleShape)
-                    )
-                    Spacer(Modifier.width(7.dp))
-                }
                 Icon(
                     Icons.Default.ExpandMore,
                     contentDescription = if (expanded) "收起" else "展开",
@@ -312,7 +314,7 @@ private fun ReportRow(
             }
             Spacer(Modifier.height(5.dp))
             Text(
-                r.title.ifBlank { r.text.take(30) },
+                cleanReportTitle(r.title.ifBlank { r.text.take(30) }),
                 fontSize = 15.5.sp,
                 lineHeight = 21.sp,
                 fontWeight = if (r.read) FontWeight.Medium else FontWeight.SemiBold,
@@ -322,8 +324,7 @@ private fun ReportRow(
             )
             // A 方案（2026-10-20 路河拍板）：收起=标题+两行摘要；点开才出正文
             if (!expanded) {
-                val sum = (r.summary.ifBlank { r.text.lineSequence().firstOrNull() ?: "" })
-                    .replace(Regex("^[①-⑮0-9一二三四五六七八九十、.·\\s]+"), "")
+                val sum = cleanReportSummary(r.summary, r.text)
                 if (sum.isNotBlank()) {
                     Spacer(Modifier.height(3.dp))
                     Text(
@@ -339,7 +340,7 @@ private fun ReportRow(
                 Spacer(Modifier.height(6.dp))
                 SelectionContainer {
                     Text(
-                        r.text,
+                        cleanReportBody(r.text),
                         fontSize = 14.sp,
                         color = LuyuanPalette.Ink2,
                         lineHeight = 23.sp
@@ -352,6 +353,64 @@ private fun ReportRow(
                     LuyuanTextAction("删掉", onClick = onDelete, tone = LuyuanPalette.Red)
                 }
             }
+        }
+    }
+}
+
+/* ---- 2026-10-29 复查：汇报格式清洗 ----
+   问题一：分类签已经写了「提醒」，标题还顶一个「提醒：」——重复。
+   问题二：路远远有时把「没说利害」「通知没写」这种自我说明当摘要，对人零信息量。
+   生成侧已改提示词（steward.js），这里再兜一层，历史数据也能看。 */
+private val META_SUM = Regex("^(没说|没提|通知没写|原文没写|原文没提|未提及|不清楚|不详|未知)")
+
+internal fun cleanReportTitle(t: String): String {
+    var s = t.trim()
+    val urgent = Regex("^【?(急|重要)】?").containsMatchIn(s)
+    s = s.replace(Regex("^【?(急|重要)】?\\s*"), "")
+        .replace(Regex("^(提醒|晨报|简报|来件|通知|管家)\\s*[:：]\\s*"), "")
+    return (if (urgent) "【急】" else "") + s
+}
+
+internal fun stripMark(s: String): String = s
+    .replace(Regex("^[①-⑮]\\s*"), "")
+    .replace(Regex("^\\d{1,2}\\s*[、.．]\\s*"), "")
+    .replace(Regex("^[一二三四五六七八九十]{1,3}\\s*、\\s*"), "")
+    .trim()
+
+internal fun cleanReportSummary(summary: String, text: String): String {
+    val s = stripMark(if (summary.isBlank()) text.lineSequence().firstOrNull() ?: "" else summary)
+    if (s.isNotEmpty() && !META_SUM.containsMatchIn(s)) return s
+    val first = stripMark(text.lineSequence().firstOrNull() ?: "")
+    if (first.isNotEmpty() && !META_SUM.containsMatchIn(first)) return first
+    return "原文没写影响，点开看全文"
+}
+
+/* 2026-10-29 复查：正文里的「①没说利害」整行是机器的自我说明，删掉并重新编号；
+   完全相同的整行只留一次（逾期列表里有重复抽出的同一条待办）。 */
+private val MARKS = listOf("①","②","③","④","⑤","⑥","⑦","⑧","⑨","⑩")
+private val NUM_LINE = Regex("^\\s*(?:[①-⑩]|\\d+[、.．])\\s*(.+)$")
+
+internal fun cleanReportBody(t: String): String {
+    val seen = HashSet<String>()
+    val kept = ArrayList<String>()
+    for (raw in t.split("\n")) {
+        val line = raw.trimEnd()
+        if (line.isBlank()) { if (kept.isNotEmpty() && kept.last().isNotEmpty()) kept.add(""); continue }
+        val m = NUM_LINE.matchEntire(line)
+        val content = m?.groupValues?.get(1)?.trim()
+        if (content != null && META_SUM.containsMatchIn(content)) continue
+        if (!seen.add(line)) continue
+        kept.add(line)
+    }
+    var n = 0
+    while (kept.isNotEmpty() && kept.last().isEmpty()) kept.removeAt(kept.size - 1)
+    return kept.joinToString("\n") { line ->
+        val m = NUM_LINE.matchEntire(line)
+        if (m == null) line
+        else {
+            val mark = if (n < MARKS.size) MARKS[n] else "${n + 1}、"
+            n++
+            mark + " " + m.groupValues[1].trim()
         }
     }
 }

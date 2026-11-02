@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  vc130：允许明文 HTTP。
+  为什么需要：北极星大脑跑在 PC 上（Tailscale 内网 IP，如 100.122.162.59:8787），
+  只有 http，没有证书；Android 9+ 默认禁止明文请求 → 位置一条也发不出去，
+  报错还是静默的（只在 prefs 里能看到 "Cleartext HTTP traffic not permitted"）。
+
+  只放行「我们自己填的局域网/Tailscale 地址」，没有全局放开（对比
+  android:usesCleartextTraffic="true" 那种一刀切）：域名/IP 都可配置，
+  但 base-config 允许明文，是因为接收地址由用户在设置里填，写死名单反而会
+  在换 IP 时静默失败。请求只出到内网 + 只带经纬度。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

@@ -207,7 +207,7 @@ fun PeopleScreen(vm: LuyuanViewModel, onNoteClick: (String) -> Unit = {}) {
             Box(modifier = Modifier.fillMaxSize()) {
                 LazyColumn(
                     state = listState,
-                    contentPadding = PaddingValues(bottom = 104.dp),
+                    contentPadding = PaddingValues(bottom = 76.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp)
                 ) {

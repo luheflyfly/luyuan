@@ -329,7 +329,7 @@ fun CourseScreen(vm: LuyuanViewModel, onAsk: () -> Unit, onTrash: () -> Unit, on
         }
     ) { pad ->
         LazyColumn(
-            contentPadding = PaddingValues(bottom = 104.dp),
+            contentPadding = PaddingValues(bottom = 76.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier
                 .fillMaxSize()

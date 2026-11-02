@@ -17,6 +17,16 @@
     <!-- 桌面小部件「记一笔」的悬浮速记条（桌面直接打字，不开 App） -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
+    <!-- vc130 位置共享：App 自己带定位权限取坐标，再主动 POST 给北极星。
+         为什么非这样不可：Android 16 上 `dumpsys location` 对 shell 用户返回加密坐标
+         （M:1,10,-855677,744251，不可逆），`cmd location` 没有读位置子命令。
+         BACKGROUND_LOCATION 一并声明（Android 10+ 要单独申请）：常规路径是
+         location 类型前台服务在跑，FINE 就够；声明它只为将来「不开 App 也报」留口子。 -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+
     <!-- 微信/QQ 跳转需要包可见性声明（Android 11+） -->
     <queries>
         <package android:name="com.tencent.mm" />
@@ -30,6 +40,7 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.Luyuan"
+        android:networkSecurityConfig="@xml/network_security_config"
         tools:targetApi="34">
 
         <activity
@@ -81,6 +92,14 @@
             android:name=".platform.FloatingQuickNoteService"
             android:exported="false" />
 
+        <!-- vc130 位置共享前台服务：每 5 分钟（或显著位移）把坐标报给北极星。
+             foregroundServiceType=location 是硬要求：Android 14+ 起前台服务必须声明类型，
+             不写就 SecurityException（而且这个类型同时也是"后台也能取点"的依据）。 -->
+        <service
+            android:name=".platform.LocationReporterService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
         <!-- 通知自动记账：监听微信/支付宝支付通知 → 待确认（用户点 ✓ 才真入账） -->
         <service
             android:name=".platform.PaymentNotificationListener"
@@ -95,6 +114,10 @@
         <!-- vc115：intent-filter 摘除——发送方全走 setClass 显式 intent，非 exported receiver 的 filter 无意义 -->
         <receiver
             android:name=".platform.TodoActionReceiver"
+            android:exported="false" />
+        <!-- vc131 收件箱通知按钮：点「食堂/外卖/暂时不吃」→ POST /api/inbox/answer（不开 App） -->
+        <receiver
+            android:name=".platform.InboxActionReceiver"
             android:exported="false" />
         <!-- 消息待办：监听微信/QQ 聊天通知 → 粗筛 → 云端抽取 → 待确认（默认关闭，开关在设置页） -->
         <service

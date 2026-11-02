@@ -104,6 +104,18 @@ class MainActivity : ComponentActivity() {
     /** 快捷磁贴/通知唤起时的目标页（"record" = 进录音页直接开录） */
     private var autoRoute by mutableStateOf("list")
 
+    /**
+     * vc130 位置共享：装机后第一次开 App 弹一次系统授权框（定位 + 通知）。
+     * 拒绝也不拦路 —— 只是不报位置，开关仍在设置页，随时能补授。
+     */
+    private val locationPermLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { _ ->
+        if (com.luyuan.data.LocationSettings.enabled(this)) {
+            com.luyuan.platform.LocationReporterService.start(this)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // 09-13 夜修「胶囊打字看不见」复发（vc57 的 imePadding 在路河 vivo 上无效）：
@@ -123,6 +135,8 @@ class MainActivity : ComponentActivity() {
         // vc109 P1 录音崩溃抢救：启动即扫残留 capture 标记/旧版 pcm.tmp 孤儿，后台线程跑（不阻塞 UI）
         Thread { com.luyuan.data.RecordingRescue.scanAndRescue(this) }.start()
         autoRoute = routeFromIntent(intent)
+        // vc130：位置共享默认开 —— 开 App 就把上报服务拉起来（已有权限时静默启动）
+        startLocationReporterIfEnabled()
         setContent {
             LuyuanTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
@@ -135,6 +149,35 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         autoRoute = routeFromIntent(intent)
+    }
+
+    /**
+     * vc130 位置共享的启动闸门（2026-11-01：「把实时位置上报给北极星」）。
+     *
+     * 三档：
+     *   1. 开关关着 → 什么都不做（关掉就是真关，不留后台驻留）
+     *   2. 开关开着但没定位权限 → **只在这里**弹一次系统授权框，用户点
+     *      「使用 App 时允许」即可；授权回调里再启动服务
+     *   3. 权限齐了 → 静默启动前台服务（常驻通知「路远正在记录位置」）
+     */
+    private fun startLocationReporterIfEnabled() {
+        if (!com.luyuan.data.LocationSettings.enabled(this)) return
+        if (!com.luyuan.platform.LocationReporterService.hasLocationPermission(this)) {
+            window.decorView.post {
+                try {
+                    locationPermLauncher.launch(
+                        arrayOf(
+                            android.Manifest.permission.ACCESS_FINE_LOCATION,
+                            android.Manifest.permission.ACCESS_COARSE_LOCATION,
+                            android.Manifest.permission.POST_NOTIFICATIONS
+                        )
+                    )
+                } catch (_: Exception) {
+                }
+            }
+            return
+        }
+        com.luyuan.platform.LocationReporterService.start(this)
     }
 
     /** 快捷磁贴/通知/桌面组件唤起时的目标页。
@@ -194,6 +237,16 @@ fun AppRoot(startDest: String) {
     val lastSlot = androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(-1) }
     val lastPage = androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
     val tabsNow = androidx.compose.runtime.rememberUpdatedState(tabs)
+    /* vc129（2026-10-29 体检批）：底部记事胶囊只在「会记事」的四页常驻（笔记 0 / 记账 1 / 日记 3 / 待办 5）。
+       记账页必须留着——它没有别的加一笔入口，胶囊就是它的录入框。
+       学业、人脉、路远远三页跟记事无关，胶囊在那儿纯占底部一条，已隐藏。
+       derivedStateOf 只在「显示/隐藏」翻转时触发重组，切页本身不额外重算。 */
+    val capsuleSlotVisible by androidx.compose.runtime.remember {
+        androidx.compose.runtime.derivedStateOf {
+            val s = lastSlot.intValue
+            s == -1 || s == 0 || s == 1 || s == 3 || s == 5
+        }
+    }
     LaunchedEffect(Unit) {
         snapshotFlow { pagerState.currentPage }.collect { p ->
             lastPage.intValue = p
@@ -661,7 +714,7 @@ fun AppRoot(startDest: String) {
             // 09-15 路河实测拍板回退：恢复「点一下胶囊就地展开」（Q13 拍板版），撤掉 TerminalInputDialog 中转。
             // 已知权衡：vivo/鸿蒙 4 主窗口 IME insets 可能拿不到——若「打字被键盘挡住」回归，就在展开态输入框上
             // 继续治（胶囊层 imePadding 已挂），不再改道独立窗口。
-            if (currentRoute == "home" && !multiSelect && !showAsk && !showSettings) {
+            if (currentRoute == "home" && capsuleSlotVisible && !multiSelect && !showAsk && !showSettings) {
                 TerminalCapsule(
                     expanded = expanded,
                     onToggleExpanded = { expanded = !expanded },

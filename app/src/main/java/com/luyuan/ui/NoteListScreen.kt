@@ -101,6 +101,7 @@ import com.luyuan.domain.Note
 import com.luyuan.platform.PermissionHelper
 import com.luyuan.ui.design.LuyuanBadge
 import com.luyuan.ui.design.LuyuanIconButton
+import com.luyuan.data.Todo
 import com.luyuan.ui.design.LuyuanPalette
 import com.luyuan.ui.design.LuyuanRadius
 import com.luyuan.ui.design.LuyuanSpace
@@ -197,7 +198,7 @@ private fun formatTime(created: String): String {
     return dt?.format(DateTimeFormatter.ofPattern("HH:mm")) ?: ""
 }
 
-/** 微信式相对日期：今天 / 昨天 / 周X（7天内）/ 2026.9.5 */
+/** 微信式相对日期：今天 / 昨天 / 周X（7天内）/ 10月11日 / 2025年10月11日（与电脑端同一口径） */
 private fun dayLabel(d: LocalDate): String {
     val today = LocalDate.now()
     val dow = when (d.dayOfWeek.value) {
@@ -207,7 +208,8 @@ private fun dayLabel(d: LocalDate): String {
         d == today -> "今天"
         d == today.minusDays(1) -> "昨天"
         d.isAfter(today.minusDays(7)) -> "周$dow"
-        else -> "${d.year}.${d.monthValue}.${d.dayOfMonth}"
+        d.year == today.year -> "${d.monthValue}月${d.dayOfMonth}日"
+        else -> "${d.year}年${d.monthValue}月${d.dayOfMonth}日"
     }
 }
 
@@ -340,6 +342,8 @@ fun NoteListScreen(
     val groups = remember(filtered) { groupByDay(filtered) }
 
     val todayCount = remember(notes) { notes.count { parseDay(it.created_at) == LocalDate.now() } }
+    // vc129（2026-10-29 体检批）：首页第一屏先回答「今天要办什么」，再往下才是记事流。
+    val openTodos by vm.todos.collectAsStateWithLifecycle()
     Scaffold(
         topBar = {
             // vc127：自绘头部（ui/design/Components.kt）。标题 24sp + 一行副题报数，
@@ -506,13 +510,19 @@ fun NoteListScreen(
                     )
                 }
                 LazyColumn(
-                    contentPadding = PaddingValues(bottom = 104.dp),
+                    contentPadding = PaddingValues(bottom = 132.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxSize()
                         .offset { IntOffset(0, pullConn.overPull.roundToInt()) } // 皮筋跟手：顶端下拖时整列随指下移
                         .padding(horizontal = LuyuanSpace.gutter)
                         .padding(top = 4.dp)
                 ) {
+                    // vc129：「今天」卡只在干净首页出现（搜索/多选时让位给结果）
+                    if (query.isBlank() && !selecting && openTodos.any { !it.done }) {
+                        item(key = "today_brief") {
+                            TodayBrief(openTodos, onTodos)
+                        }
+                    }
                     for (g in groups) {
                         item(key = "h_${g.label}_${g.notes.size}") {
                             // 多选态：点日期分组头 = 选/不选这一整天（稿 multiselect.html「按日期全选」）
@@ -639,6 +649,131 @@ private fun MoodBar(notes: List<Note>) {
  * 笔记卡（vc127）：纸面上一张更亮的纸，1dp 发丝边，无投影。
  * 多选不再插入一行 Checkbox（会让整列瞬间跳 40dp），改成右上角 22dp 圆环覆盖层——布局零位移。
  */
+/**
+ * 「今天」卡（vc129 · 2026-10-29 体检批）。
+ * 体检结论：原来打开 App 第一眼看到的是分类列表和一堆空态，没有一页回答「我今天该干什么」。
+ * 这一张卡把待办池里最急的一件事顶到首屏，点一下进待办页。
+ */
+@Composable
+private fun TodayBrief(todos: List<Todo>, onTodos: () -> Unit) {
+    val now = remember { System.currentTimeMillis() }
+    val open = remember(todos) { todos.filter { !it.done } }
+    val overdue = remember(open, now) {
+        open.count { t -> dueMillis(t.due_at)?.let { it < now } == true }
+    }
+    val upcoming = remember(open, now) {
+        open.filter { t -> dueMillis(t.due_at)?.let { it >= now } == true }
+            .sortedBy { dueMillis(it.due_at) ?: Long.MAX_VALUE }
+    }
+    val next = upcoming.firstOrNull()
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .clip(LuyuanRadius.lgShape)
+            .background(LuyuanPalette.Surface)
+            .border(1.dp, LuyuanPalette.Line, LuyuanRadius.lgShape)
+            .clickable(onClick = onTodos)
+            .padding(horizontal = 16.dp, vertical = 13.dp)
+    ) {
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("今天", style = LuyuanType.cardTitle)
+                if (overdue > 0) {
+                    Spacer(Modifier.size(8.dp))
+                    Text(
+                        "逾期 $overdue",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = LuyuanPalette.Red
+                    )
+                }
+                Spacer(Modifier.weight(1f))
+                Text(
+                    "${open.size} 件未办 →",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = LuyuanPalette.Green700
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                when {
+                    next != null -> "下一件：" + next.text
+                    open.isEmpty() -> "没有要办的事，今天空着"
+                    else -> "还有 ${open.size} 件没写截止时间，点开按主题翻"
+                },
+                fontSize = 13.sp,
+                color = if (next != null) LuyuanPalette.Ink1 else LuyuanPalette.Ink3,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+/** due_at 兼容两种写法：带时区（PC 写）与裸本地时间（早期数据）。解析失败当没截止。 */
+private fun dueMillis(s: String): Long? {
+    if (s.isBlank()) return null
+    return runCatching { java.time.OffsetDateTime.parse(s).toInstant().toEpochMilli() }
+        .recoverCatching {
+            LocalDateTime.parse(s)
+                .atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        }
+        .getOrNull()
+}
+
+/** 半成品条目标识：转写失败/没听清/抢救中——这些不是内容，不该占一张大卡。 */
+private fun pendingLine(text: String): String? {
+    val t = text.trim()
+    if (t.isEmpty()) return "空记录"
+    if (t.startsWith("（未识别到人声") || t.startsWith("(未识别到人声")) return "语音没听清 · 点开可听原声"
+    if (t.startsWith("（录音中断") || t.startsWith("(录音中断")) return "录音中断，原声已保留"
+    if (t.startsWith("（语音待转写") || t.startsWith("(语音待转写")) return "语音待转写 · 电脑在转"
+    return null
+}
+
+/** 半成品条目的一行形态：左边一句人话说明，右边时间；点进详情仍能听原声/改/删。 */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun PendingNoteRow(
+    note: Note,
+    label: String,
+    selecting: Boolean,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    onToggleSelect: () -> Unit
+) {
+    val haptic = LocalHapticFeedback.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(LuyuanRadius.mdShape)
+            .background(if (isSelected) LuyuanPalette.Green50 else LuyuanPalette.Sunken.copy(alpha = 0.42f))
+            .border(1.dp, LuyuanPalette.Line, LuyuanRadius.mdShape)
+            .combinedClickable(
+                onClick = { if (selecting) onToggleSelect() else onClick() },
+                onLongClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onLongClick()
+                }
+            )
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            label,
+            fontSize = 12.sp,
+            color = LuyuanPalette.Ink3,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        Spacer(Modifier.size(8.dp))
+        Text(formatTime(note.created_at), style = LuyuanType.caption)
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun NoteCard(
@@ -650,6 +785,13 @@ fun NoteCard(
     onLongClick: () -> Unit = {},
     onToggleSelect: () -> Unit = {}
 ) {
+    // vc129（2026-10-29 体检批）：转写失败/没听清/抢救中压成一行灰字。
+    // 这些条目仍然可点、可长按多选、可删——只是不再用一张大卡把首屏占满。
+    val pend = remember(note.text) { pendingLine(note.text) }
+    if (pend != null) {
+        PendingNoteRow(note, pend, selecting, isSelected, onClick, onLongClick, onToggleSelect)
+        return
+    }
     val (title, summary) = remember(note.text) { splitTitleSummary(note.text) }
     val haptic = LocalHapticFeedback.current
     Box(
@@ -673,7 +815,7 @@ fun NoteCard(
                 }
             )
     ) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 11.dp)) {
             if (title.isNotEmpty()) {
                 Text(
                     text = highlighted(title, query),
@@ -687,7 +829,7 @@ fun NoteCard(
                 Text(
                     text = highlighted(summary, query),
                     style = LuyuanType.bodySmall,
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 3.dp)
                 )

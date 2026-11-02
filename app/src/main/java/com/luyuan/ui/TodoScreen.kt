@@ -151,7 +151,8 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
         val key: String, val text: String, val who: String,
         val score: Long, val dueLabel: String, val origin: String,
         val isPending: Boolean = false,
-        val msgItem: Todo? = null
+        val msgItem: Todo? = null,
+        val topic: String = ""   // vc128：主题标签
     )
 
     // 2026-09-18 检查批：now 每 30s 走一次（原 remember 固定在进页时刻，页面久开过期红字不刷新）
@@ -190,7 +191,8 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
                     score = deadlineScore(t.when_text, t.due_at.takeIf { it.isNotBlank() }, t.created_at, now),
                     dueLabel = dueLabel(t.due_at.takeIf { it.isNotBlank() }, t.when_text, now),
                     origin = if (t.device == "pc") "电脑" else "消息", // PC msgdigest 同步件标注
-                    msgItem = t
+                    msgItem = t,
+                    topic = t.topic
                 )
             )
         }
@@ -243,7 +245,7 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
             if (view == "expired") {
                 ExpiredSection(
                     trows = expiredRows.map {
-                        TRow(it.key, it.text, it.who, it.score, it.dueLabel, it.origin, it.isPending)
+                        TRow(it.key, it.text, it.who, it.score, it.dueLabel, it.origin, it.isPending, it.topic)
                     },
                     onToggle = { key ->
                         if (key.startsWith("msg_")) {
@@ -320,7 +322,7 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
                 // vc113：时间轴=首页（路河只看今天要做什么）——未办按截止日分桶
                 TimelineView(
                     trows = activeRows.map {
-                        TRow(it.key, it.text, it.who, it.score, it.dueLabel, it.origin, it.isPending)
+                        TRow(it.key, it.text, it.who, it.score, it.dueLabel, it.origin, it.isPending, it.topic)
                     },
                     now = now,
                     onOpen = { key -> if (key.startsWith("msg_")) detailId = key.removePrefix("msg_") },
@@ -410,7 +412,8 @@ fun TodoScreen(vm: LuyuanViewModel, onBack: () -> Unit, embedded: Boolean = fals
 private data class TRow(
     val key: String, val text: String, val who: String,
     val score: Long, val dueLabel: String, val origin: String,
-    val isPending: Boolean
+    val isPending: Boolean,
+    val topic: String = ""   // vc128：主题标签（路远远整理）
 )
 
 /** 列表/时间轴切换胶囊（设计 token：选中=Green50 底+Green700 字） */
@@ -441,7 +444,7 @@ private fun TimelineView(trows: List<TRow>, now: LocalDateTime, onToggle: (Strin
         out
     }
     LazyColumn(
-        contentPadding = PaddingValues(bottom = 104.dp),
+        contentPadding = PaddingValues(bottom = 132.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
         modifier = Modifier
             .fillMaxSize()
@@ -564,7 +567,7 @@ private fun TimelineRow(r: TRow, onToggle: (String) -> Unit, onOpen: (String) ->
             )
             Spacer(Modifier.height(2.dp))
             Text(
-                (r.who + " · " + r.origin).trim(' ', '·'),
+                (if (r.topic.isNotBlank()) "〔${r.topic}〕 " else "") + (r.who + " · " + r.origin).trim(' ', '·'),
                 fontSize = 11.sp,
                 color = if (overdue) LuyuanPalette.Red.copy(alpha = 0.75f) else LuyuanPalette.Ink3,
                 maxLines = 1,
@@ -774,6 +777,7 @@ private fun TodoDetailPage(
                     val who = t.who.ifBlank { t.sender }
                     val srcLine = todoSrcLabel(t.source) + if (who.isNotBlank()) " · $who" else ""
                     DetailInfoRow("来源", srcLine)
+                    if (t.topic.isNotBlank()) DetailInfoRow("主题", "〔${t.topic}〕")   // vc128：路远远整理打的同主题标签
                     DetailInfoRow("收录", todoIso(t.created_at)?.let { todoFmt(it) } ?: t.created_at.take(16))
                     DetailInfoRow("截止", due?.let { (t.when_text.takeIf { w -> w.isNotBlank() }?.let { w -> "$w · " } ?: "") + todoFmt(it) } ?: "无限期")
                     DetailInfoRow("提醒", remind?.let { todoFmt(it) } ?: "未设")

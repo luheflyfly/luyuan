@@ -198,7 +198,7 @@ fun JournalScreen(vm: LuyuanViewModel, onRecord: () -> Unit, onReview: () -> Uni
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
-                .padding(bottom = 104.dp), // 避让悬浮胶囊（任务9：定时提醒开关此前被遮）
+                .padding(bottom = 132.dp), // 避让悬浮胶囊（2026-10-29：104 不够，胶囊+底栏会把最后一条压住）
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             // ---------- 书写卡（journal-desk 稿 .desk）：直写 + 自动保存 + 工具条 ----------

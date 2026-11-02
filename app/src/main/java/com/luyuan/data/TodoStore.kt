@@ -25,6 +25,7 @@ data class Todo(
     val raw: String = "",           // 原始消息（溯源用）
     val source: String = "",        // wechat | qq | manual
     val sender: String = "",        // 通知发送者
+    val topic: String = "",         // vc128：主题标签（路远远整理智能体写入，双端展示；本类收录防手机改写时丢字段）
     val done: Boolean = false,      // 完成标记（与笔记 todo_done 语义一致）
     val remind_at: String? = null,  // vc113：自动提醒时刻 ISO8601（收录时按截止前1小时自动算；到点走提醒渠道）
     val reminded: Boolean? = null,  // vc113：已响过标记（防重复弹；语义与联系人待办同）
