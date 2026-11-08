@@ -1,5 +1,7 @@
 # 路远 · 安卓 App（Luyuan for Android）
 
+> **电脑端（Windows）**：Python + 本地模型 + Syncthing，见 [luheflyfly/luyuan-desktop](https://github.com/luheflyfly/luyuan-desktop)
+
 [![Build APK](https://github.com/luheflyfly/luyuan/actions/workflows/build.yml/badge.svg)](https://github.com/luheflyfly/luyuan/actions/workflows/build.yml)
 [![Release](https://img.shields.io/github/v/release/luheflyfly/luyuan?label=release)](https://github.com/luheflyfly/luyuan/releases)
 [![License](https://img.shields.io/github/license/luheflyfly/luyuan?label=license)](LICENSE)
